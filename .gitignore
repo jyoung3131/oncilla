@@ -1,0 +1,6 @@
+*.o
+*.swp
+*.swo
+cscope.out
+bin/oncillamem
+.sconsign.dblite

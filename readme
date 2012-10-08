@@ -2,3 +2,34 @@ What: Distributed Memory Allocation Framework
 Who: Alex Merritt, Jeff Young
 
 For use with Jeff Young's Oncilla Project.
+
+-- Prerequisites --
+
+* gcc (obviously)
+* openmpi, libopenmpi
+* python, scons
+* evpath
+
+-- Build --
+
+The command is simply:
+
+$ scons
+    or
+$ scons --quiet
+
+This will produce a binary 'oncillamem' to bin/.
+
+To clean:
+
+$ scons -c
+
+-- Execution --
+
+For an easy run:
+
+bin $ ./launch nodefile
+
+Manually:
+
+bin $ mpiexec -np N -npernode 1
