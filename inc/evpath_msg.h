@@ -16,4 +16,24 @@
 
 /* Project includes */
 
+/* Defines */
+
+/* Types */
+
+struct evmsg
+{
+    int rank;
+};
+
+typedef struct evmsg evmsg, *evmsg_ptr;
+
+/* Global state */
+
+extern FMField evfmt_evmsg[];
+extern FMStructDescRec fmt_list[];
+
+/* Function prototypes */
+
+int ev_init(int rank);
+
 #endif  /* __EVPATH_MSG__ */

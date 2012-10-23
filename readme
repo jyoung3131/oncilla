@@ -9,27 +9,50 @@ For use with Jeff Young's Oncilla Project.
 * openmpi, libopenmpi
 * python, scons
 * evpath
+* perl >=5.9.4 (for gccfilter)
+* libregexp-common-perl (for gccfilter)
+* libgetopt-argvfile-perl (for gccfilter)
 
 -- Build --
 
 The command is simply:
 
-$ scons
-    or
-$ scons --quiet
+    $ scons [-Q] [evstatic=1] [filter=1]
 
 This will produce a binary 'oncillamem' to bin/.
 
+'evstatic' argument - when enabled, will force all EVPath libraries to link
+statically into final executable.
+
+'filter' argument - when enabled, will cause all gcc output to pass through a
+colorizing filter for easier identification of errors.
+
 To clean:
 
-$ scons -c
+    $ scons -c [-Q]
 
 -- Execution --
 
-For an easy run:
+For an easy run (on octane*):
 
-bin $ ./launch nodefile
+    bin/$ ./launch
 
 Manually:
 
-bin $ mpiexec -np N -npernode 1
+    bin/$ mpiexec -np N -npernode 1 -hostfile $(pwd)/nodefile $(pwd)/oncillamem
+
+bin/nodefile should contain the DNS of each node this code will execute on, one
+per line. The first machine is where rank0 (the master) will be spawned.
+
+Edit bin/nodefile to list the machines on which the daemons should spawn so that
+bin/launch will spawn them appropriately.
+
+-- Using the API --
+
+TODO
+
+apps must link against liboncillamem & include oncillamem.h
+maybe have these install to the system?
+
+if a process dies... the daemon perhaps should detect this and deallocate all
+memory that was allcoated to it
