@@ -12,7 +12,8 @@ function _launch
 {
     nodes=$(wc -l $_nodefile | cut -f 1 -d ' ')
     echo mpiexec -np $nodes -npernode 1 -hostfile $nodefile $_exec
-    mpiexec -np $nodes -npernode 1 -hostfile $_nodefile $_exec
+    #mpiexec -np $nodes -npernode 1 -hostfile $_nodefile $_exec
+    mpiexec --mca btl_tcp_if_include eth1 -np $nodes -npernode 1 -hostfile $_nodefile $_exec
 }
 
 [ ! -e $_exec ] && echo $_404str_oncilla && exit 1
