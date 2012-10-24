@@ -11,7 +11,6 @@
 #include <unistd.h>
 
 /* Other project includes */
-#include <evpath.h>
 
 /* Project includes */
 #include <mpi_msg.h>
