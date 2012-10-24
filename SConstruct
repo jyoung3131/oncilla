@@ -16,12 +16,12 @@ import sys
 
 # C configuration environment
 
-mpi_path = '/usr/lib64/mvapich2/'
+mpi_path = '/usr/lib64/openmpi/'
 mpi_libpath = mpi_path + 'lib/'
 mpi_include = mpi_path + 'include/'
-mpi_libs = ['mpich']
+mpi_libs = ['mpi']
 
-gcc = '/usr/lib64/mvapich2/bin/mpicc'
+gcc = 'mpicc'
 gccfilter = './gccfilter -c '
 
 if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
