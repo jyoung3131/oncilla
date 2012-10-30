@@ -59,8 +59,16 @@ TODO
 apps must link against liboncillamem & include oncillamem.h
 maybe have these install to the system?
 
+-- DEV NOTES --
+
 if a process dies... the daemon perhaps should detect this and deallocate all
 memory that was allcoated to it
 
 library must perform part of the allocation request, as malloc etc cannot be
 used if created in another process, such as the daemon
+
+the daemon may instruct the library to carry out certain things using the MQ
+module. eg an allocation that happens locally, the daemon may inject messages
+instructing the library to perform an allocation, return the pointer value to
+the daemon (forwarding it to rank0) then injecting another message to release
+the application
