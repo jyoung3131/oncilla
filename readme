@@ -8,7 +8,6 @@ For use with Jeff Young's Oncilla Project.
 * gcc (obviously)
 * openmpi, libopenmpi
 * python, scons
-* evpath
 * perl >=5.9.4 (for gccfilter)
 * libregexp-common-perl (for gccfilter)
 * libgetopt-argvfile-perl (for gccfilter)
@@ -17,15 +16,14 @@ For use with Jeff Young's Oncilla Project.
 
 The command is simply:
 
-    $ scons [-Q] [evstatic=1] [filter=1]
+    $ scons [-Q] [filter=1] [dbg=1]
 
 This will produce a binary 'oncillamem' to bin/.
 
-'evstatic' argument - when enabled, will force all EVPath libraries to link
-statically into final executable.
-
 'filter' argument - when enabled, will cause all gcc output to pass through a
 colorizing filter for easier identification of errors.
+
+'dbg' enables debug symbols to be built in for use with GDB
 
 To clean:
 
@@ -47,6 +45,13 @@ per line. The first machine is where rank0 (the master) will be spawned.
 Edit bin/nodefile to list the machines on which the daemons should spawn so that
 bin/launch will spawn them appropriately.
 
+To enable debug/verbose output, define the environment variable 'OM_VERBOSE' to
+be anything (the code just checks if it exists, not the value it is set to for
+now).
+
+    OM_VERBOSE=1 ./oncillamem
+    OM_VERBOSE=1 ./launch       MPI doesn't serialize printfs between ranks...
+
 -- Using the API --
 
 TODO
@@ -56,3 +61,6 @@ maybe have these install to the system?
 
 if a process dies... the daemon perhaps should detect this and deallocate all
 memory that was allcoated to it
+
+library must perform part of the allocation request, as malloc etc cannot be
+used if created in another process, such as the daemon
