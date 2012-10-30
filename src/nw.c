@@ -93,12 +93,10 @@ export_msg(struct message *m)
     int retval = 0;
     struct message_forward *f = &worker.forward;
     printd("popping msg\n");
-    if (f->handle) f->handle(f->q, m);
+    if (f->handle)
+        retval = f->handle(f->q, m);
     else
-    {
-        printd("Error exporting nw msg - null forward handle\n");
         retval = -1;
-    }
     return retval;
 }
 
@@ -145,7 +143,7 @@ worker_thread(void *arg)
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &pstate);
     pthread_cleanup_push(listener_cleanup, NULL);
 
-    printd("IO thread alive\n");
+    printd("IO thread alive on rank %d\n", worker.mpi_rank);
 
     worker.alive = true;
 
@@ -154,26 +152,25 @@ worker_thread(void *arg)
         /* empty the work queue */
         while (!q_empty(&worker.out_q))
         {
-            if (q_pop(&worker.out_q, &nw_msg) == 0)
-            {
-                if (post_send(&nw_msg.m, nw_msg.dest_rank) < 0)
-                    printd("Error MPI_Isend\n");
-            }
-            else
-                fprintf(stderr, "q_pop returned fail\n");
+            if (q_pop(&worker.out_q, &nw_msg) != 0)
+                ABORT();
+
+            if (post_send(&nw_msg.m, nw_msg.dest_rank) < 0)
+                ABORT();
         }
 
         /* Check for incoming messages, export to other module.
          * Note: probe doesn't actually pull in the message. To pull in the
          * message, post an Irecv and use MPI_Test instead of Iprobe */
         if (!probe_waiting(&has_msg))
-            printd("Error probing for nw msgs\n");
+            ABORT();
         if (has_msg)
         {
             printd("receiving a message\n");
             if (!do_recv(&msg))
-                printd("Error receiving nw msg\n");
-            export_msg(&msg);
+                ABORT();
+            if (export_msg(&msg) < 0)
+                ABORT();
         }
 
         usleep(500);

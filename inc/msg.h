@@ -14,6 +14,7 @@
 
 /* Project includes */
 #include <util/queue.h>
+#include <alloc.h>
 
 /* Defines */
 
@@ -31,16 +32,24 @@ enum message_type
 
 enum message_status
 {
-    MSG_REQUEST,
-    MSG_RESPONSE
+    MSG_REQUEST, /* send to rank 0 */
+    MSG_RESPONSE, /* return back to sender */
+    MSG_EOL /* return to application */
 };
 
 struct message
 {
     enum message_type type;
     enum message_status status;
+
     pid_t pid; /* app which made request */
     int rank; /* rank which made request */
+
+    /* message specifics */
+    union {
+        struct alloc_request req;
+        struct alloc_ation alloc;
+    } u;
 };
 
 typedef int (*msg_forward)(struct queue *q, struct message *m, ...);

@@ -14,7 +14,7 @@
 
 /* Project includes */
 #include <io/nw.h>
-#include <alloc.h>
+#include <mem.h>
 #include <debug.h>
 
 /* Globals */
@@ -23,29 +23,36 @@
 
 int main(int argc, char *argv[])
 {
-    struct message m;
-
     printd("Verbose printing enabled\n");
 
-    if (mem_init() < 0) /* The mem interface will start the IO inteface. */
-        abort();
-    if (mem_launch() < 0)
-        abort();
+    /* The mem interface will start the IO inteface. */
+    if (mem_init() < 0)
+        ABORT();
 
     /* TODO Start the MQ, and alloc interfaces. */
-    /* TODO connect alloc export with mq import */
 
-    if (nw_get_rank() == 0)
-    {
-        m.type = MSG_REQ_ALLOC;
-        m.status = MSG_REQUEST;
-        m.pid = getpid();
-        m.rank = nw_get_rank();
+    /* TODO connect mem export with mq import */
+
+    if (mem_launch() < 0)
+        ABORT();
+
+
+#if 1 /* to test sending a message without the MQ module or apps */
+    struct message m;
+    m.type = MSG_REQ_ALLOC;
+    m.status = MSG_REQUEST;
+    m.pid = getpid();
+    m.rank = nw_get_rank();
+    m.u.req.orig_rank = m.rank;
+    m.u.req.bytes = (4 << 10);
+    if (m.rank > 0)
         if (mem_new_request(&m) < 0)
             printd("Error submitting new req\n");
-    }
+#endif
 
+    /* TODO Need to wait on signal or something instead of sleeping */
     sleep(2);
+
     mem_fin();
     return 0;
 }

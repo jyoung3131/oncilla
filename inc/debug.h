@@ -26,20 +26,35 @@
 #define BUG(expr)                       \
     do {                                \
         if (expr) {                     \
-            printd(DBG_ERROR, "BUG\n"); \
+            __detailed_print("BUG\n");  \
             assert(0);                  \
         }                               \
     } while(0)                          \
+
+#define ABORT2(expr)                        \
+    do {                                    \
+        if (expr) {                         \
+            __detailed_print("ABORT\n");    \
+            assert(0);                      \
+        }                                   \
+    } while(0)                              \
+
+#define ABORT()     ABORT2(1)
+
+#define __detailed_print(fmt, args...)                  \
+    do {                                                \
+        fprintf(stderr, "(%d:%d) %s::%s[%d]: ",     \
+                getpid(),(pid_t)syscall(SYS_gettid),    \
+                __FILE__, __func__, __LINE__);          \
+        printf(fmt, ##args);                            \
+        fflush(stderr);                                 \
+    } while(0)
 
 /* debug printing. will only print if env var OM_VERBOSE is defined */
 #define printd(fmt, args...)                                            \
     do {                                                                \
         if(__DEBUG_ENABLED) {                                           \
-            fprintf(stderr, "DBG (%d:%d) %s::%s[%d]: ",                 \
-                    getpid(),(pid_t)syscall(SYS_gettid),                \
-                    __FILE__, __func__, __LINE__);                      \
-            printf(fmt, ##args);                                        \
-            fflush(stdout);                                             \
+            __detailed_print(fmt, ##args);                              \
         }                                                               \
     } while(0)
 

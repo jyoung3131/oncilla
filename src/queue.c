@@ -48,9 +48,9 @@ __alloc_more(struct queue *q, size_t num, size_t data_size)
     while (num-- > 0)
     {
         e = calloc(1, sizeof(*e));
-        if (!e) abort();
+        if (!e) ABORT();
         data = malloc(data_size);
-        if (!data) abort();
+        if (!data) ABORT();
         __init_qentry2(e, data);
         list_add(&e->link, &q->free);
     }
