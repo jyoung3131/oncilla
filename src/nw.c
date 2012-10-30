@@ -155,11 +155,17 @@ worker_thread(void *arg)
         while (!q_empty(&worker.out_q))
         {
             if (q_pop(&worker.out_q, &nw_msg) == 0)
+            {
                 if (post_send(&nw_msg.m, nw_msg.dest_rank) < 0)
                     printd("Error MPI_Isend\n");
+            }
+            else
+                fprintf(stderr, "q_pop returned fail\n");
         }
 
-        /* check for incoming messages, export to other module */
+        /* Check for incoming messages, export to other module.
+         * Note: probe doesn't actually pull in the message. To pull in the
+         * message, post an Irecv and use MPI_Test instead of Iprobe */
         if (!probe_waiting(&has_msg))
             printd("Error probing for nw msgs\n");
         if (has_msg)

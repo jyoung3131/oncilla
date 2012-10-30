@@ -39,6 +39,27 @@ static bool handler_alive = false;
 
 /* TODO message handlers */
 
+static int
+process_msg(struct message *m)
+{
+    /*
+     * type      status  action
+     * ------------------------
+     * REQ_ALLOC REQ     find mem, send reply (status->resp)
+     * REQ_ALLOC RESP    new msg, do_alloc/req, send to rank
+     * DO_ALLOC  REQ     call libRMA, send reply (status->resp)
+     * DO_ALLOC  RESP    insert to MQ to return to app
+     * DO_FREE   REQ     libRMA, send reply (chg status)
+     * DO_FREE   RESP    depends who sent request..
+     *                      i) process explicitly requested free
+     *                      ii) process died, system requested free
+     */
+    printd("got a message: type=%s status=%s pid=%d rank=%d\n",
+            MSG_TYPE2CHAR(m->type), MSG_STATUS2CHAR(m->status),
+            m->pid, m->rank);
+    return 0;
+}
+
 /* other modules submit messages to us via this function */
 static int
 import_msg(struct queue *ignored, struct message *m, ...)
@@ -70,7 +91,7 @@ static void *
 queue_handler(void *arg)
 {
     int pstate;
-    //struct queue *q = arg;
+    struct message msg;
 
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &pstate);
     pthread_cleanup_push(queue_handler_cleanup, NULL);
@@ -79,27 +100,24 @@ queue_handler(void *arg)
 
     printd("mem thread alive\n");
 
-    while (true)
+    while (true) /* main loop */
     {
-        /* process work_q :
-         *
-         * type      status  action
-         * ------------------------
-         * REQ_ALLOC REQ     find mem, send reply (status->resp)
-         * REQ_ALLOC RESP    new msg, do_alloc/req, send to rank
-         * DO_ALLOC  REQ     call libRMA, send reply (status->resp)
-         * DO_ALLOC  RESP    insert to MQ to return to app
-         * DO_FREE   REQ     libRMA, send reply (chg status)
-         * DO_FREE   RESP    depends who sent request..
-         *                      i) process explicitly requested free
-         *                      ii) process died, system requested free
-         */
-
+        /* empty the work queue */
+        while (!q_empty(&work_q))
+        {
+            if (q_pop(&work_q, &msg) == 0)
+            {
+                if (process_msg(&msg) < 0)
+                    printd("Error processing message\n");
+            }
+            else
+                printd("q_pop returned fail\n");
+        }
         usleep(500);
     }
 
     pthread_cleanup_pop(1);
-    pthread_exit(NULL);
+    return NULL;
 }
 
 /* Public functions */
@@ -118,6 +136,8 @@ mem_init(void)
     nw_forward = nw_get_import();
     nw_set_export(&f);
 
+    /* TODO collect memory information about node */
+
     return 0;
 }
 
@@ -135,6 +155,9 @@ mem_launch(void)
     err = pthread_create(&handler_tid, NULL, queue_handler, NULL);
     if (err < 0) return -1;
     while (!handler_alive) ;
+
+    /* TODO inject messages containing static configuration of node (regarding
+     * memory capacity, etc) and send to all other ranks. expect no reply  */
 
     return 0;
 }

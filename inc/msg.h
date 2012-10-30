@@ -55,6 +55,32 @@ struct message_forward
 
 /* Static inline functions */
 
+static inline const char *
+MSG_TYPE2CHAR(enum message_type type)
+{
+    switch (type)
+    {
+        case MSG_INVALID: return "MSG_INVALID";
+        case MSG_REQ_ALLOC: return "MSG_REQ_ALLOC";
+        case MSG_DO_ALLOC: return "MSG_DO_ALLOC";
+        case MSG_DO_FREE: return "MSG_DO_FREE";
+        case MSG_ANY: return "MSG_ANY";
+        case MSG_MAX: return "MSG_MAX";
+        default: return "Unknown message_type";
+    }
+}
+
+static inline const char *
+MSG_STATUS2CHAR(enum message_status status)
+{
+    switch (status)
+    {
+        case MSG_REQUEST: return "MSG_REQUEST";
+        case MSG_RESPONSE: return "MSG_RESPONSE";
+        default: return "Unknown message_status";
+    }
+}
+
 static inline bool
 MSG_TYPE_IS_VALID(enum message_type type)
 {
