@@ -24,11 +24,14 @@ mpi_libs = ['mpi']
 gcc = 'mpicc'
 gccfilter = './gccfilter -c '
 
+ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
+ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
+
 if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
     gcc = gccfilter + gcc
 
-ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
-ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
+if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
+    ccflags.append('-ggdb')
 
 cpath = [os.getcwd() + '/inc', mpi_include]
 
