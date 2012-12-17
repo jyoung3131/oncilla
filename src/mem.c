@@ -31,12 +31,15 @@
 
 /* Internal state */
 
+/* TODO need list representing pending alloc requests */
+
 static struct queue work_q; /* work requests (messages) go here */
 
 static struct message_forward nw_forward;
 
 static pthread_t handler_tid;
-static bool handler_alive = false;
+/* volatile: gcc optimizes out updates to variable across threads */
+static volatile bool handler_alive = false;
 
 /* Private functions */
 
@@ -46,6 +49,7 @@ static int export_msg(struct message *, int);
 static int
 process_req_alloc(struct message *m)
 {
+    /* master node receiving new alloc requests from apps */
     if (m->status == MSG_REQUEST)
     {
         BUG(nw_get_rank() != 0);
@@ -64,6 +68,13 @@ process_req_alloc(struct message *m)
                 nw_get_rank());
         m->type = MSG_DO_ALLOC;
         m->status = MSG_REQUEST;
+        /* XXX only send a message if the allocation required a remote
+         * allocation. otherwise send messages back to the application to have
+         * it perform local allocs, etc.
+         *
+         * library will need to reply with the result.. perhaps create a new
+         * message type for that??
+         */
         export_msg(m, m->u.alloc.rank);
     }
     return 0;

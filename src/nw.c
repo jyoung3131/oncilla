@@ -37,7 +37,7 @@ struct nw_message
 struct worker
 {
     pthread_t tid;
-    bool alive;
+    volatile bool alive; /* gcc seems to not reread this when updated */
 
     int mpi_procs, mpi_rank;
     MPI_Request request; /* handle for outstanding recv requests */
