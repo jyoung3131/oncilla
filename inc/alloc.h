@@ -4,8 +4,8 @@
  * desc: interface for memory allocation governer
  */
 
-#ifndef __ALLOC__
-#define __ALLOC__
+#ifndef __ALLOC_H__
+#define __ALLOC_H__
 
 /* System includes */
 
@@ -69,4 +69,4 @@ int alloc_add_node(int rank, struct alloc_node_config *c/*in*/);
 int alloc_find(struct alloc_request *r/*in*/, struct alloc_ation *a/*out*/);
 int alloc_ate(struct alloc_ation *a/*in*/);
 
-#endif  /* __ALLOC__ */
+#endif  /* __ALLOC_H__ */

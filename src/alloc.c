@@ -36,6 +36,7 @@ struct node
 /* Internal state */
 
 /* TODO these may need locking (allocations will reduce mem availability) */
+/* lists maintained by rank 0 (master node) only */
 static LIST_HEAD(nodes);
 static LIST_HEAD(allocs); /* list of alloc_ation's */
 
@@ -73,6 +74,9 @@ alloc_find(struct alloc_request *r, struct alloc_ation *a)
 {
     if (!r || !a) return -1;
 
+    /* TODO Use the request and list of nodes, etc to figure out where/how to
+     * satisfy the memory request. */
+
     /* XXX hard-code local allocation for now (ie same as reg malloc) */
     a->rank = r->orig_rank;
     a->type = ALLOC_MEM_HOST;
@@ -80,13 +84,15 @@ alloc_find(struct alloc_request *r, struct alloc_ation *a)
 
     printd("called\n");
 
-    /* TODO Use the request and list of nodes, etc to figure out where/how to
-     * satisfy the memory request. */
-
     return 0;
 }
 
 /* on this node, carry out an allocation previously made by alloc_find */
+/* XXX
+ * This function should only carry out requests for allocation that necessitate
+ * involvement of a remote node. Local allocations must be passed back to the
+ * application for the library to make
+ */
 int
 alloc_ate(struct alloc_ation *a)
 {

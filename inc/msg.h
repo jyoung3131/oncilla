@@ -26,7 +26,7 @@ enum message_type
     MSG_REQ_ALLOC, /* request for new memory, handled by rank 0 */
     MSG_DO_ALLOC, /* ask a node to allocate memory */
     MSG_DO_FREE, /* ask a node to free memory */
-    MSG_ANY, /* flag indicating any of the below */
+    MSG_ANY, /* flag indicating any of the above */
     MSG_MAX /* utilize enum as int when allocating arrays of msg types */
 };
 
@@ -43,7 +43,7 @@ struct message
     enum message_status status;
 
     pid_t pid; /* app which made request */
-    int rank; /* rank which made request */
+    int rank; /* rank (app) which made request */
 
     /* message specifics */
     union {

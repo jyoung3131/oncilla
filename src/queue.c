@@ -1,5 +1,5 @@
 /**
- * file: queues.c
+ * file: queue.c
  * author: Alexander Merritt, merritt.alex@gatech.edu
  * desc: TODO
  */
