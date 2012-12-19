@@ -1,0 +1,26 @@
+#! /usr/bin/env python
+__author__ = "Alexander Merritt"
+__email__ = "merritt.alex@gatech.edu"
+
+import os
+import commands
+import sys
+
+gcc = 'gcc'
+
+ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline', '-ggdb']
+ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
+
+cpath = [os.getcwd() + '/../inc']
+
+libpath = [os.getcwd() + '/../lib']
+libs = ['ocm', 'rt']
+
+env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
+env.Append(LIBPATH = libpath, LIBS = libs)
+
+files = os.listdir('.')
+for f in files:
+    (name,ext) = os.path.splitext(f)
+    if '.c' == ext.lower():
+        bin = env.Program(name, [f])
