@@ -2,6 +2,9 @@
  * file: mq.c
  * author: Alexander Merritt, merritt.alex@gatech.edu
  * desc: message queue interface. file borrowed from Shadowfax project.
+ *
+ * TODO Could split this file into two parts, mq_daemon.c and mq_client.c to
+ * make it clear which internal state is maintained with which interface.
  */
 
 /* System includes */
@@ -24,6 +27,9 @@
 #include <debug.h>
 #include <mq.h>
 #include <msg.h>
+#include <util/queue.h>
+
+/* Definitions */
 
 /* The permissions settings are masked against the process umask. */
 #define MQ_PERMS				(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | \
@@ -42,7 +48,11 @@
 //! Default priority for messages
 #define MQ_DFT_PRIO				0
 
-static struct mq_state daemon_mq;
+#define for_each_mq(mq, mqs) \
+    list_for_each_entry(mq, &mqs, link)
+
+#define lock_mqs()      pthread_mutex_lock(&mq_states_lock)
+#define unlock_mqs()    pthread_mutex_unlock(&mq_states_lock)
 
 struct mq_message
 {
@@ -50,8 +60,47 @@ struct mq_message
     pid_t pid; /* identify application process */
     union {
         bool allow; /* OCM_CONNECT_ALLOW */
+        struct message u_msg; /* OCM_USER user message type */
     } m; /* actual message data */
 };
+
+struct mq_state
+{
+    struct list_head link;
+    bool valid;
+    char name[MAX_LEN];
+    pid_t pid;
+    mqd_t id;
+    msg_recv_callback notify;
+};
+
+/* Internal state */
+
+static struct queue msg_q;
+static struct mq_state daemon_mq; /* interface assumes one daemon MQ */
+static LIST_HEAD(mq_states);
+static pthread_mutex_t mq_states_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static pthread_t handler_tid;
+/* volatile: gcc optimizes out updates to variable across threads */
+static volatile bool handler_alive = false;
+
+/* state for library-side of interface */
+static struct mq_state send_mq, recv_mq;
+
+/* Private functions */
+
+static struct mq_state *
+find_mq(pid_t pid)
+{
+    struct mq_state *mq = NULL;
+    lock_mqs();
+    for_each_mq(mq, mq_states)
+        if (pid == mq->pid)
+            break;
+    unlock_mqs();
+    return mq;
+}
 
 /* forward declaration */
 static void __process_messages(union sigval sval);
@@ -209,9 +258,73 @@ fail:
 	return exit_errno;
 }
 
-/*
- * daemon functions
+static int
+import_msg(struct queue *ignored, struct message *m, ...)
+{
+    q_push(&msg_q, m);
+    return 0;
+}
+
+static void
+queue_handler_cleanup(void *arg)
+{
+    handler_alive = false;
+}
+
+/* mem interface gives us (mq interface) messages to send back to applications.
+ * here we sift through the work queue and demultiplex these messages out
  */
+static void *
+queue_handler(void *arg)
+{
+    int pstate, err;
+    struct message u_msg;
+    struct mq_message mq_msg;
+    struct mq_state *mq = NULL;
+
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &pstate);
+    pthread_cleanup_push(queue_handler_cleanup, NULL);
+
+    handler_alive = true;
+
+    printd("mq thread alive\n");
+
+    while (true)
+    {
+        while (!q_empty(&msg_q))
+        {
+            err = q_pop(&msg_q, &u_msg);
+            BUG(err != 0);
+
+            mq = find_mq(u_msg.pid);
+            BUG(!mq);
+
+            mq_msg.type = OCM_USER;
+            err = send_message(mq, &mq_msg);
+            BUG(err != 0);
+        }
+        usleep(500);
+    }
+
+    pthread_cleanup_pop(1);
+    return NULL;
+}
+
+static int
+launch_worker(void)
+{
+    int err;
+    if (handler_alive) return -1;
+    printd("launching mq worker\n");
+    err = pthread_create(&handler_tid, NULL, queue_handler, NULL);
+    if (err < 0) return -1;
+    while (!handler_alive) ;
+    return 0;
+}
+
+/* Public functions */
+
+/* daemon functions */
 
 /* Searches for all MQs previous failed launches may have left behind and
  * unlinks them. Do NOT call this function AFTER initializing the MQ interface
@@ -306,6 +419,10 @@ try_again:
     printd("Opened daemon MQ %d '%s'\n",
             daemon_mq.id, daemon_mq.name);
 
+    q_init(&msg_q, sizeof(struct message));
+    if (0 > launch_worker())
+        return -1;
+
     set_notify(&daemon_mq);
     return 0;
 }
@@ -331,22 +448,27 @@ int attach_close(void)
     return 0;
 }
 
-int attach_allow(struct mq_state *state, pid_t pid)
+int attach_allow(pid_t pid)
 {
-    if ( !state ) return -1;
+    struct mq_state *state = find_mq(pid);
+    BUG(!state);
     state->pid = pid;
     return open_other_mq(state);
 }
 
-int attach_dismiss(struct mq_state *state)
+int attach_dismiss(pid_t pid)
 {
-    if (!state) return -1;
+    struct mq_state *state = find_mq(pid);
+    BUG(!state);
     return close_other_mq(state);
 }
 
-int attach_send_allow(struct mq_state *state, bool allow)
+int attach_send_allow(pid_t pid, bool allow)
 {
+    struct mq_state *state = find_mq(pid);
     struct mq_message msg;
+
+    BUG(!state);
     msg.type = OCM_CONNECT_ALLOW;
     msg.m.allow = allow;
     if (0 > send_message(state, &msg)) {
@@ -354,6 +476,12 @@ int attach_send_allow(struct mq_state *state, bool allow)
         return -1;
     }
     return 0;
+}
+
+struct message_forward attach_get_import(void)
+{
+    struct message_forward f = { .handle = import_msg, .q = NULL };
+    return f;
 }
 
 #if 0
@@ -370,35 +498,30 @@ int attach_send_assembly(struct mq_state *state, assembly_key_uuid key)
 }
 #endif
 
-/*
- * Library functions
- */
+/* library functions */
 
-int attach_init(struct mq_state *recv, struct mq_state *send)
+int attach_init(void)
 {
 	struct mq_attr qattr;
-
-    if (!recv || !send)
-        return -1;
 
     memset(&qattr, 0, sizeof(qattr));
 	qattr.mq_maxmsg = MQ_MAX_MESSAGES;
 	qattr.mq_msgsize = MQ_MAX_MSG_SIZE;
 
-    recv->notify = NULL; /* interposer recvs synchronously */
-    recv->pid = -1; /* only daemon code uses this field */
-    snprintf(recv->name, MAX_LEN, "%s%d", ATTACH_NAME_PREFIX, getpid());
-    recv->id = mq_open(recv->name, MQ_OPEN_OWNER_FLAGS, MQ_PERMS, &qattr);
-    if (!MQ_ID_IS_VALID(recv->id)) {
+    recv_mq.notify = NULL; /* interposer recvs synchronously */
+    recv_mq.pid = -1; /* only daemon code uses this field */
+    snprintf(recv_mq.name, MAX_LEN, "%s%d", ATTACH_NAME_PREFIX, getpid());
+    recv_mq.id = mq_open(recv_mq.name, MQ_OPEN_OWNER_FLAGS, MQ_PERMS, &qattr);
+    if (!MQ_ID_IS_VALID(recv_mq.id)) {
         perror("mq_open");
         return -1;
     }
 
-    snprintf(send->name, MAX_LEN, "%s", ATTACH_DAEMON_MQ_NAME);
-    send->notify = NULL; /* send is an outbound mq */
-    send->pid = -1;
-    send->id = mq_open(send->name, MQ_OPEN_CONNECT_FLAGS, MQ_PERMS, qattr);
-    if (!MQ_ID_IS_VALID(send->id)) {
+    snprintf(send_mq.name, MAX_LEN, "%s", ATTACH_DAEMON_MQ_NAME);
+    send_mq.notify = NULL; /* send is an outbound mq */
+    send_mq.pid = -1;
+    send_mq.id = mq_open(send_mq.name, MQ_OPEN_CONNECT_FLAGS, MQ_PERMS, qattr);
+    if (!MQ_ID_IS_VALID(send_mq.id)) {
         perror("mq_open");
         return -1;
     }
@@ -406,18 +529,18 @@ int attach_init(struct mq_state *recv, struct mq_state *send)
     return 0;
 }
 
-int attach_tini(struct mq_state *recv, struct mq_state *send)
+int attach_tini(void)
 {
-    if (0 > mq_close(recv->id)) {
+    if (0 > mq_close(recv_mq.id)) {
         perror("mq_close");
         return -1;
     }
-    if (0 > mq_unlink(recv->name)) {
+    if (0 > mq_unlink(recv_mq.name)) {
         perror("mq_unlink");
         return -1;
     }
 
-    if (0 > mq_close(send->id)) {
+    if (0 > mq_close(send_mq.id)) {
         perror("mq_close");
         return -1;
     }
@@ -425,16 +548,13 @@ int attach_tini(struct mq_state *recv, struct mq_state *send)
     return 0;
 }
 
-int attach_send_connect(struct mq_state *recv, struct mq_state *send)
+int attach_send_connect(void)
 {
     struct mq_message msg;
 
-    if (!send)
-        return -1;
-
     msg.type = OCM_CONNECT;
     msg.pid = getpid();
-    if (0 > send_message(send, &msg)) {
+    if (0 > send_message(&send_mq, &msg)) {
         fprintf(stderr, "Error sending message to daemon\n");
         return -1;
     }
@@ -442,7 +562,7 @@ int attach_send_connect(struct mq_state *recv, struct mq_state *send)
     printd("Waiting for daemon to reply\n");
 
     /* block until daemon sends the okay */
-    if (0 > recv_message_block(recv, &msg)) {
+    if (0 > recv_message_block(&recv_mq, &msg)) {
         fprintf(stderr, "Error receving message from daemon\n");
         return -1;
     }
@@ -458,16 +578,13 @@ int attach_send_connect(struct mq_state *recv, struct mq_state *send)
     return 0;
 }
 
-int attach_send_disconnect(struct mq_state *recv, struct mq_state *send)
+int attach_send_disconnect(void)
 {
     struct mq_message msg;
 
-    if (!send)
-        return -1;
-
     msg.type = OCM_DISCONNECT;
     msg.pid = getpid();
-    if (0 > send_message(send, &msg)) {
+    if (0 > send_message(&send_mq, &msg)) {
         fprintf(stderr, "Error sending message to daemon\n");
         return -1;
     }
@@ -479,12 +596,12 @@ int attach_send_disconnect(struct mq_state *recv, struct mq_state *send)
 
 /* TODO Fix this to send an allocation request */
 #if 0
-int attach_send_request(struct mq_state *recv, struct mq_state *send,
+int attach_send_request(struct mq_state *recv_mq, struct mq_state *send,
         struct assembly_hint *hint, assembly_key_uuid key)
 {
     struct mq_message msg;
 
-    if (!recv || !send)
+    if (!recv_mq || !send)
         return -1;
 
     msg.type = OCM_REQUEST_ASSEMBLY;
@@ -496,7 +613,7 @@ int attach_send_request(struct mq_state *recv, struct mq_state *send,
     }
 
     /* block until daemon has exported assembly for us */
-    if (0 > recv_message_block(recv, &msg)) {
+    if (0 > recv_message_block(recv_mq, &msg)) {
         fprintf(stderr, "Error receving message from daemon\n");
         return -1;
     }
@@ -509,6 +626,32 @@ int attach_send_request(struct mq_state *recv, struct mq_state *send,
     return 0;
 }
 #endif
+
+/* send message to daemon */
+int attach_send(struct message *u_msg)
+{
+    struct mq_message mq_msg;
+    mq_msg.type = OCM_USER;
+    mq_msg.pid = getpid();
+    memcpy(&mq_msg.m.u_msg, u_msg, sizeof(*u_msg));
+    if (0 > send_message(&send_mq, &mq_msg)) {
+        printd("error sending msg to daemon\n");
+        return -1;
+    }
+    return 0;
+}
+
+/* receive message from daemon */
+int attach_recv(struct message *u_msg)
+{
+    struct mq_message mq_msg;
+    if (0 > recv_message(&recv_mq, &mq_msg)) {
+        printd("error receiving msg from daemon\n");
+        return -1;
+    }
+    memcpy(u_msg, &mq_msg.m.u_msg, sizeof(*u_msg));
+    return 0;
+}
 
 void attach_cleanup(void)
 {

@@ -27,7 +27,7 @@
 
 int mem_init(void);
 int mem_launch(void);
-int mem_new_request(struct message *m);
+int mem_umsg_recv(struct message *m);
 int mem_set_export(struct message_forward *f);
 struct message_forward mem_get_import(void);
 void mem_fin(void);

@@ -6,12 +6,20 @@
  * daemon.
  */
 
-#ifndef _ATTACH_H
-#define _ATTACH_H
+#ifndef __ATTACH_H__
+#define __ATTACH_H__
 
+/* System includes */
 #include <stdbool.h>
 #include <unistd.h>
 #include <mqueue.h>
+
+/* Other project includes */
+
+/* Project includes */
+#include <msg.h>
+
+/* Defines */
 
 /* mq names must start with / */
 #define ATTACH_NAME_PREFIX      "/ocm_mq_"
@@ -26,7 +34,9 @@ typedef enum
     OCM_CONNECT = 1,
     OCM_DISCONNECT,
     /* interposer recv events */
-    OCM_CONNECT_ALLOW
+    OCM_CONNECT_ALLOW,
+    /* user-defined, i.e. examine message data */
+    OCM_USER
 } msg_event;
 
 struct mq_state; /* forward declaration */
@@ -37,36 +47,32 @@ struct mq_state; /* forward declaration */
  */
 typedef void (*msg_recv_callback)(msg_event e, pid_t pid, void *data);
 
-/* connection state */
-struct mq_state
-{
-    bool valid;
-    char name[MAX_LEN];
-    pid_t pid;
-    mqd_t id;
-    msg_recv_callback notify;
-};
-
 /* daemon functions */
+
 int attach_clean(void);
 int attach_open(msg_recv_callback notify);
 int attach_close(void);
-int attach_allow(struct mq_state *state, pid_t pid);
-int attach_dismiss(struct mq_state *state);
-int attach_send_allow(struct mq_state *state, bool allow);
-//int attach_send_assembly(struct mq_state *state, assembly_key_uuid key);
+int attach_allow(pid_t pid);
+int attach_dismiss(pid_t pid);
+int attach_send_allow(pid_t pid, bool allow);
+struct message_forward attach_get_import(void);
 
-/* interposer functions */
-/* interposer does not receive asynchronous message notification from daemon */
-int attach_init(struct mq_state *recv, struct mq_state *send);
-int attach_tini(struct mq_state *recv, struct mq_state *send);
-int attach_send_connect(struct mq_state *recv, struct mq_state *send);
-int attach_send_disconnect(struct mq_state *recv, struct mq_state *send);
-//int attach_send_request(struct mq_state *recv, struct mq_state *send,
-        //struct assembly_hint *hint, assembly_key_uuid key);
+/* client functions */
+
+/* client does not receive asynchronous message notification from daemon, and
+ * only interacts with the daemon, not other clients (i.e. attach_send will send
+ * a message to the daemon). */
+
+int attach_init(msg_recv_callback notify);
+int attach_tini(void);
+int attach_send_connect(void);
+int attach_send_disconnect(void);
+/* for user-defined messages */
+int attach_send(struct message *u_msg);
+int attach_recv(struct message *u_msg);
 
 /* if code crashes, call this to remove files this interface may have created
  * which were not cleaned up */
 void attach_cleanup(void);
 
-#endif /* _ATTACH_H */
+#endif /* __ATTACH_H__ */

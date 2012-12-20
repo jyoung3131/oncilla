@@ -57,5 +57,5 @@ for f in files:
 # Specify binaries
 
 binary = env.Program('bin/oncillamem', ['src/main.c', sources])
-solib = env.SharedLibrary('lib/libocm.so', ['src/lib.c', 'src/mq.c'])
+solib = env.SharedLibrary('lib/libocm.so', ['src/lib.c', 'src/mq.c', 'src/queue.c'])
 SConscript(['test/SConscript'])

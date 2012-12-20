@@ -4,8 +4,8 @@
  * desc: TODO
  */
 
-#ifndef __MSG__
-#define __MSG__
+#ifndef __MSG_H__
+#define __MSG_H__
 
 /* System includes */
 #include <stdio.h>
@@ -104,4 +104,4 @@ MSG_IS_VALID(struct message *m)
 
 /* Function prototypes */
 
-#endif  /* __MSG__ */
+#endif  /* __MSG_H__ */

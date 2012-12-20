@@ -16,10 +16,10 @@
 /* Other project includes */
 
 /* Project includes */
+#include <debug.h>
 #include <io/nw.h>
 #include <mem.h>
 #include <mq.h>
-#include <debug.h>
 
 /* Directory includes */
 
@@ -29,7 +29,6 @@ struct app
 {
     struct list_head link;
     pid_t pid;
-    struct mq_state mq; /* PID's recv'ing MQ state */
 };
 
 #define for_each_app(app, apps) \
@@ -42,9 +41,12 @@ struct app
 
 static LIST_HEAD(apps); /* connecting processes on local node */
 static pthread_mutex_t apps_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct message_forward mq_forward;
 
 /* Functions */
 
+/* this function handles incoming messages from the app; considered the 'export'
+ * path for the mq module */
 static void process_app_msg(msg_event e, pid_t pid, void *data)
 {
     int err;
@@ -54,7 +56,8 @@ static void process_app_msg(msg_event e, pid_t pid, void *data)
 
     case OCM_CONNECT:
     {
-        printd("got ocm_connect msg from pid %d\n", pid);
+        printd("got OCM_CONNECT from pid %d\n", pid);
+
         app = calloc(1, sizeof(*app));
         if (app) {
             INIT_LIST_HEAD(&app->link);
@@ -64,11 +67,10 @@ static void process_app_msg(msg_event e, pid_t pid, void *data)
             list_add(&app->link, &apps);
             unlock_apps();
 
-            err = attach_allow(&app->mq, pid);
+            err = attach_allow(pid);
             if (err < 0)
                 fprintf(stderr, "Error attaching PID %d\n", pid);
-
-            err = attach_send_allow(&app->mq, true);
+            err = attach_send_allow(pid, true);
             if (err < 0)
                 fprintf(stderr, "Error notifying attach to PID %d\n", pid);
         }
@@ -79,7 +81,7 @@ static void process_app_msg(msg_event e, pid_t pid, void *data)
 
     case OCM_DISCONNECT:
     {
-        printd("got ocm_disconnect msg from pid %d\n", pid);
+        printd("got OCM_DISCONNECT from pid %d\n", pid);
 
         lock_apps();
         for_each_app(app, apps)
@@ -89,30 +91,32 @@ static void process_app_msg(msg_event e, pid_t pid, void *data)
             list_del(&app->link);
         unlock_apps();
 
-        if (app) {
-            err = attach_dismiss(&app->mq);
-            if (err < 0)
-                fprintf(stderr, "Error dismissing PID %d\n", pid);
-            free(app);
-        }
-        else
-            fprintf(stderr, "Fatal error, PID %d leaving but"
-                    " state not found\n", pid);
+        BUG(!app);
+
+        if (0 > attach_dismiss(pid))
+            fprintf(stderr, "Error dismissing PID %d\n", pid);
+        free(app);
     }
     break;
 
-#if 0 /* to test sending a message without the MQ module or apps */
-    struct message m;
-    m.type = MSG_REQ_ALLOC;
-    m.status = MSG_REQUEST;
-    m.pid = getpid();
-    m.rank = nw_get_rank();
-    m.u.req.orig_rank = m.rank;
-    m.u.req.bytes = (4 << 10);
-    if (m.rank > 0)
-        if (mem_new_request(&m) < 0)
-            printd("Error submitting new req\n");
-#endif
+    case OCM_USER:
+    {
+        printd("got OCM_USER from pid %d\n", pid);
+
+        /* such messages could be new requests (e.g. allocate, free) or response to
+         * an allocation that is in-progress (e.g. mem module telling app to
+         * allocate memory and register with RMA interface)
+         */
+        struct message u_msg = *((struct message*)data);
+        /* fill in remaining fields */
+        u_msg.rank = nw_get_rank();
+        u_msg.u.req.orig_rank = u_msg.rank;
+        if (0 > mem_umsg_recv(&u_msg)) {
+            fprintf(stderr, "error transferring msg to nw\n");
+            printd("error transferring msg to nw\n");
+        }
+    }
+    break;
 
     default:
     break;
@@ -121,23 +125,14 @@ static void process_app_msg(msg_event e, pid_t pid, void *data)
 
 int main(int argc, char *argv[])
 {
-    int err;
-
     printd("Verbose printing enabled\n");
 
-    /* The mem interface will start the IO inteface. */
-    ABORT2(mem_init() < 0);
+    ABORT2(mem_init() < 0); /* mem and io interfaces */
+    ABORT2(attach_open(process_app_msg) < 0); /* mq interface */
+    mq_forward = attach_get_import();
+    ABORT2(mem_set_export(&mq_forward) < 0); /* connect mq and mem */
 
-    /* TODO Start the MQ, and alloc interfaces. */
-    err = attach_open(process_app_msg);
-    if (err < 0) {
-        fprintf(stderr, "Error opening MQ interface\n");
-        return -1;
-    }
-
-    /* TODO connect mem export with mq import */
-
-    ABORT2(mem_launch() < 0);
+    ABORT2(mem_launch() < 0); /* start system */
 
     /* TODO Need to wait on signal or something instead of sleeping */
     sleep(10);

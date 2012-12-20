@@ -2,6 +2,10 @@
  * file: queue.c
  * author: Alexander Merritt, merritt.alex@gatech.edu
  * desc: TODO
+ *
+ * TODO
+ *  1. desc
+ *  2. make a define for locking a queue
  */
 
 /* System includes */
