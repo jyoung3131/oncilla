@@ -32,7 +32,7 @@
 /* Internal state */
 
 static LIST_HEAD(allocs); /* list of struct alloc_ation */
-//static pthread_mutex_t allocs_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t allocs_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Private functions */
 
@@ -66,7 +66,7 @@ ocm_init(void)
         return -1;
     }
 
-    /* tell daemon who we are */
+    /* tell daemon who we are, wait for confirmation msg */
     memset(&msg, 0, sizeof(msg));
     msg.type = MSG_CONNECT;
     msg.pid = getpid();
@@ -117,14 +117,14 @@ ocm_tini(void)
 ocm_alloc_t
 ocm_alloc(size_t bytes)
 {
-    //ocm_alloc_t ocm_alloc = NULL;
-
-    /* XXX Code the protocol. */
-
-    //struct allocation a;
-    //INIT_LIST_HEAD(&a.link);
-
     struct message msg;
+    struct alloc_ation *a = calloc(1, sizeof(*a));
+
+    if (!a) {
+        fprintf(stderr, "Out of memory\n");
+        return NULL;
+    }
+
     msg.type = MSG_REQ_ALLOC;
     msg.status = MSG_REQUEST;
     msg.pid = getpid();
@@ -156,15 +156,21 @@ ocm_alloc(size_t bytes)
             return NULL;
     }
 
-    BUG(msg.type != MSG_RELEASE_APP);
+    if (msg.type != MSG_RELEASE_APP)
+        BUG(1);
     printd("got release msg from daemon\n");
 
-    /* TODO append alloc_ation struct to list and return */
+    memcpy(a, &msg.u.alloc, sizeof(*a));
+    INIT_LIST_HEAD(&a->link);
 
-    return NULL; /* XXX */
+    lock_allocs();
+    list_add(&a->link, &allocs);
+    unlock_allocs();
+
+    return a;
 }
 
-void
+int
 ocm_free(ocm_alloc_t a)
 {
     ABORT(); /* XXX Code the protocol. */

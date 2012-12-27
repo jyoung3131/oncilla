@@ -31,7 +31,6 @@ enum message_type
 
     MSG_REQ_ALLOC, /* alloc_request msg; resp is alloc_ation msg */
     MSG_DO_ALLOC, /* alloc_do message */
-    MSG_FIN_ALLOC, /* alloc completed on all participating nodes */
 
     MSG_REQ_FREE, /* lib requests free of mem */
     MSG_DO_FREE, /* mem module asks region be free'd */
@@ -44,7 +43,7 @@ enum message_type
 
 enum message_status
 {
-    MSG_NO_STATUS = 0,
+    MSG_NO_STATUS = 0, /* used when status is irrelevant */
     MSG_REQUEST,
     MSG_RESPONSE
 };
@@ -65,54 +64,9 @@ struct message
     } u;
 };
 
-typedef int (*msg_forward)(struct queue *q, struct message *m, ...);
-
-struct message_forward
-{
-    msg_forward handle;
-    struct queue *q;
-};
-
 /* Global state (externs) */
 
 /* Static inline functions */
-
-static inline const char *
-MSG_TYPE2CHAR(enum message_type type)
-{
-    switch (type)
-    {
-        case MSG_INVALID: return "MSG_INVALID";
-        case MSG_REQ_ALLOC: return "MSG_REQ_ALLOC";
-        case MSG_DO_ALLOC: return "MSG_DO_ALLOC";
-        case MSG_ANY: return "MSG_ANY";
-        case MSG_MAX: return "MSG_MAX";
-        default: return "Unknown message_type";
-    }
-}
-
-static inline const char *
-MSG_STATUS2CHAR(enum message_status status)
-{
-    switch (status)
-    {
-        case MSG_REQUEST: return "MSG_REQUEST";
-        case MSG_RESPONSE: return "MSG_RESPONSE";
-        default: return "Unknown message_status";
-    }
-}
-
-static inline bool
-MSG_TYPE_IS_VALID(enum message_type type)
-{
-    return ((type > MSG_INVALID) && (type < MSG_MAX));
-}
-
-static inline bool
-MSG_IS_VALID(struct message *m)
-{
-    return MSG_TYPE_IS_VALID(m->type);
-}
 
 /* Function prototypes */
 

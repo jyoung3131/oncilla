@@ -107,7 +107,7 @@ static void
 add_mailbox(struct mailbox *mb)
 {
     lock_mailboxes();
-    list_add(&mailboxes, &mb->link);
+    list_add(&mb->link, &mailboxes);
     unlock_mailboxes();
 }
 
