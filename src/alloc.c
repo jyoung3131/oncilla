@@ -80,9 +80,9 @@ alloc_find(struct alloc_request *r, struct alloc_ation *a)
     /* XXX hard-code local allocation for now (ie same as reg malloc) */
     a->rank = r->orig_rank;
     a->type = ALLOC_MEM_HOST;
-    a->ids.bytes = r->bytes;
+    a->bytes = r->bytes;
 
-    printd("called\n");
+    printd("called; local alloc hard-coded\n");
 
     return 0;
 }
@@ -99,13 +99,6 @@ alloc_ate(struct alloc_ation *a)
     if (!a) return -1;
 
     printd("called\n");
-
-    if (a->type == ALLOC_MEM_HOST)
-    {
-        __detailed_print("allocating %lu bytes via glib\n", a->ids.bytes);
-        a->ids.ptr = (unsigned long)malloc(a->ids.bytes);
-        ABORT2(!a->ids.ptr); /* XXX maybe don't abort this: alloc elsewhere... */
-    }
 
     /* TODO iterate through items in the allocation and make calls into the
      * associated resource - gpu, call CUDA; host, call malloc and/or libRMA */

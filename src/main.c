@@ -19,7 +19,7 @@
 #include <debug.h>
 #include <io/nw.h>
 #include <mem.h>
-#include <mq.h>
+#include <pmsg.h>
 
 /* Directory includes */
 
@@ -41,101 +41,142 @@ struct app
 
 static LIST_HEAD(apps); /* connecting processes on local node */
 static pthread_mutex_t apps_lock = PTHREAD_MUTEX_INITIALIZER;
-static struct message_forward mq_forward;
+
+static pthread_t poll_tid;
+
+/* queue of messages mem wants to sent out to processes */
+static struct queue outbox;
 
 /* Functions */
 
-/* this function handles incoming messages from the app; considered the 'export'
- * path for the mq module */
-static void process_app_msg(msg_event e, pid_t pid, void *data)
+/* do something with in-coming messages from apps */
+static void
+process_msg(struct message *msg)
 {
-    int err;
     struct app *app = NULL;
 
-    switch (e) {
+    switch (msg->type) {
 
-    case OCM_CONNECT:
+    case MSG_CONNECT:
     {
-        printd("got OCM_CONNECT from pid %d\n", pid);
-
         app = calloc(1, sizeof(*app));
-        if (app) {
-            INIT_LIST_HEAD(&app->link);
-            app->pid = pid;
+        ABORT2(!app);
+        INIT_LIST_HEAD(&app->link);
+        app->pid = msg->pid;
 
-            lock_apps();
-            list_add(&app->link, &apps);
-            unlock_apps();
+        lock_apps();
+        list_add(&app->link, &apps);
+        unlock_apps();
 
-            err = attach_allow(pid);
-            if (err < 0)
-                fprintf(stderr, "Error attaching PID %d\n", pid);
-            err = attach_send_allow(pid, true);
-            if (err < 0)
-                fprintf(stderr, "Error notifying attach to PID %d\n", pid);
+        if (pmsg_attach(app->pid) < 0) {
+            fprintf(stderr, "error attaching new pid %d\n", app->pid);
+            return;
         }
-        else
-            fprintf(stderr, "Out of memory\n");
+
+        msg->type = MSG_CONNECT_CONFIRM;
+        msg->status = MSG_RESPONSE;
+        pmsg_send(app->pid, msg);
+
     }
     break;
 
-    case OCM_DISCONNECT:
+    case MSG_DISCONNECT:
     {
-        printd("got OCM_DISCONNECT from pid %d\n", pid);
-
+        printd("app %d departing\n", msg->pid);
         lock_apps();
         for_each_app(app, apps)
-            if (app->pid == pid)
+            if (msg->pid == app->pid)
                 break;
-        if (app)
-            list_del(&app->link);
+        BUG(!app);
+        list_del(&app->link);
         unlock_apps();
 
-        BUG(!app);
-
-        if (0 > attach_dismiss(pid))
-            fprintf(stderr, "Error dismissing PID %d\n", pid);
+        printd("app %d found, detaching\n", msg->pid);
+        pmsg_detach(app->pid);
         free(app);
     }
     break;
 
-    case OCM_USER:
-    {
-        printd("got OCM_USER from pid %d\n", pid);
-
-        /* such messages could be new requests (e.g. allocate, free) or response to
-         * an allocation that is in-progress (e.g. mem module telling app to
-         * allocate memory and register with RMA interface)
-         */
-        struct message u_msg = *((struct message*)data);
-        /* fill in remaining fields */
-        u_msg.rank = nw_get_rank();
-        u_msg.u.req.orig_rank = u_msg.rank;
-        if (0 > mem_umsg_recv(&u_msg)) {
-            fprintf(stderr, "error transferring msg to nw\n");
-            printd("error transferring msg to nw\n");
-        }
-    }
-    break;
-
+    /* all other messages */
     default:
-    break;
+    {
+        msg->rank = nw_get_rank();
+        mem_add_msg(msg);
     }
+    break;
+
+    }
+}
+
+static void *
+poll_mailbox(void *arg)
+{
+    struct message msg;
+
+    printd("mailbox poller alive\n");
+
+    while (true) {
+        while (!q_empty(&outbox)) {
+            q_pop(&outbox, &msg);
+            pmsg_send(msg.pid, &msg);
+        }
+        while (pmsg_pending() > 0) {
+            if (pmsg_recv(&msg, false) < 0)
+                pthread_exit(NULL);
+            printd("got a msg: %d\n", msg.type);
+            process_msg(&msg);
+        }
+        usleep(500);
+    }
+
+    return NULL;
+}
+
+static int
+launch_poll_thread(void)
+{
+    if (pthread_create(&poll_tid, NULL, poll_mailbox, NULL) < 0) {
+        printd("error launching mailbox polling thread\n");
+        return -1;
+    }
+    return 0;
 }
 
 int main(int argc, char *argv[])
 {
     printd("Verbose printing enabled\n");
 
-    ABORT2(mem_init() < 0); /* mem and io interfaces */
-    ABORT2(attach_open(process_app_msg) < 0); /* mq interface */
-    mq_forward = attach_get_import();
-    ABORT2(mem_set_export(&mq_forward) < 0); /* connect mq and mem */
+    q_init(&outbox, sizeof(struct message));
 
-    ABORT2(mem_launch() < 0); /* start system */
+    if (mem_init() < 0) {
+        fprintf(stderr, "error initializing mem\n");
+        return -1;
+    }
+
+    /* mem will append msgs to apps into this queue */
+    mem_set_outbox(&outbox);
+
+    pmsg_cleanup();
+    if (pmsg_init(sizeof(struct message)) < 0) {
+        fprintf(stderr, "error initializing pmsg\n");
+        return -1;
+    }
+    if (pmsg_open(PMSG_DAEMON_PID) < 0) {
+        fprintf(stderr, "error opening recv mailbox\n");
+        return -1;
+    }
+    if (launch_poll_thread() < 0) {
+        fprintf(stderr, "error launching poll thread\n");
+        return -1;
+    }
+
+    if (mem_launch() < 0) {
+        fprintf(stderr, "error launching\n");
+        return -1;
+    }
 
     /* TODO Need to wait on signal or something instead of sleeping */
-    sleep(10);
+    sleep(3600);
 
     mem_fin();
     return 0;

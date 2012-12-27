@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <oncillamem.h>
 
 #define ALLOC_SIZE (1UL << 20)
@@ -8,7 +9,7 @@ int main(void)
     void *alloc = NULL;
 
     if (0 > ocm_init()) {
-        printf("ocm_init failed\n");
+        printf("Cannot connect to OCM\n");
         return -1;
     }
 

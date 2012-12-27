@@ -8,6 +8,7 @@
 #define __ALLOC_H__
 
 /* System includes */
+#include <stdint.h>
 
 /* Other project includes */
 
@@ -23,6 +24,7 @@ enum alloc_ation_type
     ALLOC_MEM_INVALID = 0,
 
     ALLOC_MEM_HOST,
+    ALLOC_MEM_RMA,
     ALLOC_MEM_GPU,
 
     ALLOC_MEM_MAX
@@ -48,15 +50,29 @@ struct alloc_node_config
 struct alloc_ation
 {
     struct list_head link;
-    /* TODO make all these into arrays to handle partitioned memories */
-    int rank; /* node to provide the memory */
-    enum alloc_ation_type type;
     /* resource-specific memory object identifiers */
-    struct {
-        size_t bytes;
-        /* TODO NLA, host pointers, GPU pointers, etc */
-        unsigned long ptr;
-    } ids;
+    /* TODO make all these into arrays to handle partitioned memories */
+
+    enum alloc_ation_type type;
+    size_t bytes;
+    /* TODO NLA, host pointers, GPU pointers, etc */
+    uintptr_t ptr;
+    int rank; /* node to provide the memory */
+
+};
+
+enum alloc_do_type
+{
+    ALLOC_DO_INVALID = 0,
+    ALLOC_DO_MALLOC,
+    ALLOC_DO_RMA
+};
+
+struct alloc_do
+{
+    enum alloc_do_type type;
+    size_t bytes;
+    uintptr_t ptr;
 };
 
 /* Global state (externs) */

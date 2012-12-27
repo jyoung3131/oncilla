@@ -2,6 +2,12 @@
  * file: nw.c
  * author: Alexander Merritt, merritt.alex@gatech.edu
  * desc: network messaging state and initialization
+ *
+ * One internal queue maintained for out-going messages, of struct nw_message.
+ * Client provides us with pointer to queue for exporting messages we receive
+ * from the network, holding struct message. Messages sent over the network are
+ * of struct message. nw_message merely holds state identifying to which rank a
+ * pending message must be sent.
  */
 
 /* System includes */
@@ -30,7 +36,7 @@
 
 struct nw_message
 {
-    int dest_rank;
+    int to_rank;
     struct message m; /* payload */
 };
 
@@ -42,15 +48,23 @@ struct worker
     int mpi_procs, mpi_rank;
     MPI_Request request; /* handle for outstanding recv requests */
 
-    struct message_forward forward; /* for us to send messages out */
-    struct queue out_q; /* queue of nw_message */
+    struct queue pending_q; /* queue of nw_message */
 };
 
 /* Internal state */
 
-static struct worker worker; /* only one thread allowed due to OpenMPI */
+/* only one thread allowed due to OpenMPI */
+static struct worker worker;
+/* messages received from network pushed here */
+static struct queue *recv_q;
 
 /* Private functions */
+
+static inline void
+push_recvd(struct message *m)
+{
+    q_push(recv_q, m);
+}
 
 static inline bool
 probe_waiting(bool *has_msg)
@@ -86,39 +100,6 @@ post_send(struct message *m, int rank)
     return (err == MPI_SUCCESS ? 0 : -1);
 }
 
-/* another module gives us the forward, we use that to pass on recvd messages */
-static int
-export_msg(struct message *m)
-{
-    int retval = 0;
-    struct message_forward *f = &worker.forward;
-    printd("popping msg\n");
-    if (f->handle)
-        retval = f->handle(f->q, m);
-    else
-        retval = -1;
-    return retval;
-}
-
-/* other modules submit messages to us via this function */
-static int
-import_msg(struct queue *ignored, struct message *m, ...)
-{
-    va_list extra;
-    struct nw_message nw_m = { .dest_rank = -1, .m = *m };
-
-    if (!m) return -1;
-
-    /* extract third argument as int - the rank */
-    va_start(extra, m);
-    nw_m.dest_rank = va_arg(extra, int);
-    va_end(extra);
-
-    printd("appending msg, for rank %d\n", nw_m.dest_rank);
-    q_push(&worker.out_q, &nw_m);
-    return 0;
-}
-
 static void
 listener_cleanup(void *arg)
 {
@@ -150,12 +131,12 @@ worker_thread(void *arg)
     while (true) /* main loop */
     {
         /* empty the work queue */
-        while (!q_empty(&worker.out_q))
+        while (!q_empty(&worker.pending_q))
         {
-            if (q_pop(&worker.out_q, &nw_msg) != 0)
+            if (q_pop(&worker.pending_q, &nw_msg) != 0)
                 ABORT();
 
-            if (post_send(&nw_msg.m, nw_msg.dest_rank) < 0)
+            if (post_send(&nw_msg.m, nw_msg.to_rank) < 0)
                 ABORT();
         }
 
@@ -169,8 +150,7 @@ worker_thread(void *arg)
             printd("receiving a message\n");
             if (!do_recv(&msg))
                 ABORT();
-            if (export_msg(&msg) < 0)
-                ABORT();
+            push_recvd(&msg);
         }
 
         usleep(500);
@@ -187,26 +167,8 @@ nw_init(void)
 {
     printd("IO interface initializing\n");
     memset(&worker, 0, sizeof(worker));
-    q_init(&worker.out_q, sizeof(struct nw_message));
+    q_init(&worker.pending_q, sizeof(struct nw_message));
     return 0;
-}
-
-/* set the 'forward' this module should call when exporting a msg */
-int
-nw_set_export(struct message_forward *f)
-{
-    if (!f) return -1;
-    worker.forward.handle = f->handle;
-    worker.forward.q = f->q;
-    return 0;
-}
-
-/* obtain nw func to call when passing msg to this module */
-struct message_forward
-nw_get_import(void)
-{
-    struct message_forward f = { .handle = import_msg, .q = NULL };
-    return f;
 }
 
 int
@@ -235,5 +197,27 @@ nw_fin(void)
     if (0 == pthread_cancel(worker.tid))
         pthread_join(worker.tid, NULL);
     while (worker.alive) ;
-    q_free(&worker.out_q);
+    q_free(&worker.pending_q);
+}
+
+/* other modules submit messages to us via this function */
+int
+nw_send(struct message *m, int to_rank)
+{
+    struct nw_message nw_m = { .to_rank = to_rank, .m = *m };
+
+    if (!m) return -1;
+
+    printd("appending msg, for rank %d\n", nw_m.to_rank);
+    q_push(&worker.pending_q, &nw_m);
+    return 0;
+}
+
+/* messages from the network will be pushed onto here */
+int
+nw_set_recv_q(struct queue *q)
+{
+    if (!q) return -1;
+    recv_q = q;
+    return 0;
 }

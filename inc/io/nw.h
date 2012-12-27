@@ -28,10 +28,10 @@
 /* Function prototypes */
 
 int nw_init(void);
-int nw_set_export(struct message_forward *f);
-struct message_forward nw_get_import(void);
 int nw_launch(void);
 int nw_get_rank(void);
 void nw_fin(void);
+int nw_send(struct message *m, int to_rank);
+int nw_set_recv_q(struct queue *q);
 
 #endif  /* __NW__ */

@@ -33,10 +33,8 @@
 
 /* TODO need list representing pending alloc requests */
 
-static struct queue work_q; /* work requests (messages) go here */
-
-static struct message_forward nw_forward; /* to export msgs to network */
-static struct message_forward mq_forward; /* to export msgs to MQ interface */
+static struct queue msg_q; /* incoming pending messages (from nw) */
+static struct queue *outbox; /* msgs intended for apps  (to pmsg) */
 
 static pthread_t handler_tid;
 /* volatile: gcc optimizes out updates to variable across threads */
@@ -44,13 +42,26 @@ static volatile bool handler_alive = false;
 
 /* Private functions */
 
-/* forward declaration */
-static int export_msg_io(struct message *, int);
-static int export_msg_mq(struct message *, pid_t);
+inline static void
+send_rank(struct message *m, int to_rank)
+{
+    printd("sending to rank %d via MPI\n", to_rank);
+    nw_send(m, to_rank);
+}
 
+inline static void
+send_pid(struct message *m, pid_t to_pid)
+{
+    printd("sending to app %d\n", to_pid);
+    m->pid = to_pid;
+    q_push(outbox, m);
+}
+
+/* message type MSG_REQ_ALLOC */
 static int
 process_req_alloc(struct message *m)
 {
+    int err;
     /* master node receiving new alloc requests from apps */
     if (m->status == MSG_REQUEST)
     {
@@ -58,50 +69,59 @@ process_req_alloc(struct message *m)
         /* make request, copy result */
         struct alloc_ation a;
         printf("rank0 recv msg: alloc req\n");
-        BUG(alloc_find(&m->u.req, &a) < 0);
+        err = alloc_find(&m->u.req, &a);
+        BUG(err < 0);
         m->u.alloc = a;
         m->status = MSG_RESPONSE;
-        export_msg_io(m, m->rank); /* return to origin */
+        send_rank(m, m->rank); /* return to origin */
     }
     /* TODO RESP: new msg DO_ALLOC, send to rank */
     else if (m->status == MSG_RESPONSE)
     {
-        printf("rank%d recv msg: alloc resp, convert to do_alloc command\n",
+        printf("rank%d recv msg: req_alloc resp -> do_alloc\n",
                 nw_get_rank());
         m->type = MSG_DO_ALLOC;
         m->status = MSG_REQUEST;
-        /* XXX only send a message if the allocation required a remote
-         * allocation. otherwise send messages back to the application to have
-         * it perform local allocs, etc.
-         *
-         * library will need to reply with the result.. perhaps create a new
-         * message type for that??
-         */
-        export_msg_io(m, m->u.alloc.rank);
+        if (m->u.alloc.type == ALLOC_MEM_HOST) {
+            printd("sending do_alloc to pid %d\n", m->pid);
+            send_pid(m, m->pid);
+        } else if (m->u.alloc.type == ALLOC_MEM_RMA) {
+            printd("sending do_alloc to rank %d\n", m->u.alloc.rank);
+            send_rank(m, m->u.alloc.rank);
+        } else {
+            BUG(1);
+        }
     }
     return 0;
 }
 
+/* message type MSG_DO_ALLOC */
+/* XXX we assume an allocation request is not partitioned for now. this means
+ * that a response to a do_alloc is the last remaining message before releasing
+ * the application */
 static int
 process_do_alloc(struct message *m)
 {
+    /* in-coming RMA request from another node */
     if (m->status == MSG_REQUEST)
     {
         printf("rank%d msg: do alloc req, libRMA/glib/cuda alloc\n",
                 nw_get_rank());
         ABORT2(alloc_ate(&m->u.alloc) < 0);
         m->status = MSG_RESPONSE;
-        export_msg_io(m, m->rank); /* return to origin */
+        send_rank(m, m->rank); /* return to origin */
     }
-    /* TODO RESP: insert to MQ to return to app */
+    /* in-coming response from app or rank that it completed a DO_ALLOC request */
     else if (m->status == MSG_RESPONSE)
     {
         printf("rank%d msg: do alloc resp, return to app via MQ\n",
                 nw_get_rank());
-        m->status = MSG_EOL;
-        /*export_msg_io(m, m->pid);*/ /* return to app via MQ */
+        m->type = MSG_RELEASE_APP;
+        m->status = MSG_NO_STATUS;
+        /* XXX put allocation state into message, send to app and rank 0 */
+        send_pid(m, m->pid);
+        //send_rank(m, m->rank); /* return to app */
     }
-    m->status++;
     return 0;
 }
 
@@ -127,40 +147,6 @@ process_do_free(struct message *m)
     return 0;
 }
 
-/* other modules submit messages to us via this function */
-static int
-import_msg(struct queue *ignored, struct message *m, ...)
-{
-    q_push(&work_q, m);
-    return 0;
-}
-
-/* export message to network */
-static int
-export_msg_io(struct message *m, int rank)
-{
-    if (!nw_forward.handle)
-        return -1;
-    if (nw_forward.handle(nw_forward.q, m, rank) < 0) {
-        printd("error forwarding msg to nw\n");
-        return -1;
-    }
-    return 0;
-}
-
-/* export messages back to applications */
-static int
-export_msg_mq(struct message *m, pid_t pid)
-{
-    if (!mq_forward.handle)
-        return -1;
-    if (mq_forward.handle(mq_forward.q, m, pid) < 0) {
-        printd("error forwarding msg to mq\n");
-        return -1;
-    }
-    return 0;
-}
-
 static void
 queue_handler_cleanup(void *arg)
 {
@@ -182,9 +168,9 @@ queue_handler(void *arg)
 
     while (true)
     {
-        while (!q_empty(&work_q))
+        while (!q_empty(&msg_q))
         {
-            if (q_pop(&work_q, &msg) != 0)
+            if (q_pop(&msg_q, &msg) != 0)
                 BUG(1);
 
             err = 0;
@@ -192,10 +178,9 @@ queue_handler(void *arg)
                 err = process_req_alloc(&msg);
             else if (msg.type == MSG_DO_ALLOC)
                 err = process_do_alloc(&msg);
-            else if (msg.type == MSG_DO_FREE)
-                err = process_do_free(&msg);
-            else
-                err = -1; /* unknown message, just die */
+            else {
+                BUG(1);
+            }
 
             if (err != 0)
                 BUG(1);
@@ -212,16 +197,13 @@ queue_handler(void *arg)
 int
 mem_init(void)
 {
-    struct message_forward f = { .handle = import_msg, .q = NULL };
-
     printd("memory interface initializing\n");
-
-    q_init(&work_q, sizeof(struct message));
 
     if (nw_init() < 0)
         return -1;
-    nw_forward = nw_get_import();
-    nw_set_export(&f);
+
+    q_init(&msg_q, sizeof(struct message));
+    nw_set_recv_q(&msg_q);
 
     /* TODO collect memory information about node */
 
@@ -249,40 +231,6 @@ mem_launch(void)
     return 0;
 }
 
-/* message received from application */
-int
-mem_umsg_recv(struct message *m)
-{
-    int err = -1;
-    printd("new message\n");
-    /* XXX create a new request entry in a list.. each incoming message from
-     * either app or nw will confirm portions of the allocation */
-    if (m->type == MSG_REQ_ALLOC && m->status == MSG_REQUEST) {
-        if (nw_forward.handle)
-            err = nw_forward.handle(nw_forward.q, m, 0/*rank*/);
-    } else {
-        /* XXX msg might be a reponse to a message originally from us telling
-         * app to do something */
-    }
-    return err;
-}
-
-int
-mem_set_export(struct message_forward *f)
-{
-    if (!f) return -1;
-    mq_forward.handle = f->handle;
-    mq_forward.q = f->q;
-    return 0;
-}
-
-struct message_forward
-mem_get_import(void)
-{
-    struct message_forward f = { .handle = import_msg, .q = NULL };
-    return f;
-}
-
 void
 mem_fin(void)
 {
@@ -293,5 +241,22 @@ mem_fin(void)
     if (0 == pthread_cancel(handler_tid))
         pthread_join(handler_tid, NULL);
     while (handler_alive) ;
-    q_free(&work_q);
+    q_free(&msg_q);
+}
+
+/* message received from application */
+int
+mem_add_msg(struct message *m)
+{
+    if (!m) return -1;
+    q_push(&msg_q, m);
+    return 0;
+}
+
+void
+mem_set_outbox(struct queue *ob)
+{
+    if (!ob)
+        return;
+    outbox = ob;
 }

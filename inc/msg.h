@@ -23,18 +23,30 @@
 enum message_type
 {
     MSG_INVALID = 0,
-    MSG_REQ_ALLOC, /* request for new memory, handled by rank 0 */
-    MSG_DO_ALLOC, /* ask a node to allocate memory */
-    MSG_DO_FREE, /* ask a node to free memory */
+
+    MSG_CONNECT, /* app -> daemon */
+    MSG_CONNECT_CONFIRM, /* daemon -> app */
+
+    MSG_DISCONNECT, /* app -> daemon */
+
+    MSG_REQ_ALLOC, /* alloc_request msg; resp is alloc_ation msg */
+    MSG_DO_ALLOC, /* alloc_do message */
+    MSG_FIN_ALLOC, /* alloc completed on all participating nodes */
+
+    MSG_REQ_FREE, /* lib requests free of mem */
+    MSG_DO_FREE, /* mem module asks region be free'd */
+
+    MSG_RELEASE_APP, /* release app thread, req has completed */
+
     MSG_ANY, /* flag indicating any of the above */
     MSG_MAX /* utilize enum as int when allocating arrays of msg types */
 };
 
 enum message_status
 {
-    MSG_REQUEST, /* send to rank 0 */
-    MSG_RESPONSE, /* return back to sender */
-    MSG_EOL /* return to application */
+    MSG_NO_STATUS = 0,
+    MSG_REQUEST,
+    MSG_RESPONSE
 };
 
 struct message
@@ -49,6 +61,7 @@ struct message
     union {
         struct alloc_request req;
         struct alloc_ation alloc;
+        struct alloc_do d;
     } u;
 };
 
@@ -72,7 +85,6 @@ MSG_TYPE2CHAR(enum message_type type)
         case MSG_INVALID: return "MSG_INVALID";
         case MSG_REQ_ALLOC: return "MSG_REQ_ALLOC";
         case MSG_DO_ALLOC: return "MSG_DO_ALLOC";
-        case MSG_DO_FREE: return "MSG_DO_FREE";
         case MSG_ANY: return "MSG_ANY";
         case MSG_MAX: return "MSG_MAX";
         default: return "Unknown message_type";

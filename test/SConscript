@@ -16,6 +16,12 @@ cpath = [os.getcwd() + '/../inc']
 libpath = [os.getcwd() + '/../lib']
 libs = ['ocm', 'rt']
 
+if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
+    gcc = gccfilter + gcc
+
+if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
+    ccflags.append('-ggdb')
+
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBS = libs)
 

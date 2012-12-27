@@ -13,7 +13,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#define __DEBUG_ENABLED     (getenv("OM_VERBOSE"))
+#define __DEBUG_ENABLED     (getenv("OCM_VERBOSE"))
 
 /**
  * Halt immediately if expression 'expr' evaluates to true and print a message.

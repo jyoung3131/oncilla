@@ -21,7 +21,7 @@ mpi_libpath = mpi_path + 'lib/'
 mpi_include = mpi_path + 'include/'
 mpi_libs = ['mpi']
 
-gcc = 'mpicc'
+gcc = mpi_path + 'bin/mpicc'
 gccfilter = './gccfilter -c '
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
@@ -36,7 +36,7 @@ if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
 cpath = [os.getcwd() + '/inc', mpi_include]
 
 libpath = [mpi_libpath]
-libs = [mpi_libs]
+libs = [mpi_libs, 'rt']
 
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBS = libs)
@@ -57,5 +57,5 @@ for f in files:
 # Specify binaries
 
 binary = env.Program('bin/oncillamem', ['src/main.c', sources])
-solib = env.SharedLibrary('lib/libocm.so', ['src/lib.c', 'src/mq.c', 'src/queue.c'])
+solib = env.SharedLibrary('lib/libocm.so', ['src/lib.c', 'src/pmsg.c', 'src/queue.c'])
 SConscript(['test/SConscript'])
