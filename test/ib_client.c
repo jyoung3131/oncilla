@@ -8,22 +8,18 @@
 
 #include "ib_defines.h"
 
-void spin_test(void)
-{
-    srand(time(NULL));
-
-    //char *text = strdup("client wrote some data to buffer");
-    char *text = strdup("____________________________________________________");
-    size_t text_len = strlen(text);
-
-}
-
 int main(int argc, char *argv[])
 {
     ib_t ib;
     struct ib_params params;
     struct ib_msg *msg = calloc(1, sizeof(*msg));
     uint64_t id;
+
+    srand(time(NULL));
+
+    //char *text = strdup("client wrote some data to buffer");
+    char *text = strdup("____________________________________________________");
+    size_t text_len = strlen(text);
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s serverDNS\n", argv[0]);

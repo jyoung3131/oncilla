@@ -8,17 +8,6 @@
 
 #include "ib_defines.h"
 
-void spin_test(void)
-{
-    uint64_t last_id = 0UL;
-    while (msg->op != OP_STOP) {
-        if (msg->id <= last_id) { usleep(100); continue; }
-        last_id = msg->id;
-        printf("new msg %02lu: '%s'\n", msg->id, msg->text);
-    }
-
-}
-
 int main(void)
 {
     ib_t ib;
@@ -54,7 +43,13 @@ int main(void)
      * Loop until the buffer has been modified by the client
      * indicating a stop.
      */
-    spin_test();
+
+    uint64_t last_id = 0UL;
+    while (msg->op != OP_STOP) {
+        if (msg->id <= last_id) { usleep(100); continue; }
+        last_id = msg->id;
+        printf("new msg %02lu: '%s'\n", msg->id, msg->text);
+    }
 
     return 0;
 }
