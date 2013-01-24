@@ -16,7 +16,7 @@ import sys
 
 # C configuration environment
 
-mpi_path = '/usr/lib64/mvapich2/'
+mpi_path = '/usr/lib64/mvapich2'
 mpi_libpath = mpi_path + 'lib/'
 mpi_include = mpi_path + 'include/'
 mpi_libs = ['mpich']
@@ -57,5 +57,8 @@ for f in files:
 # Specify binaries
 
 binary = env.Program('bin/oncillamem', ['src/main.c', sources])
-solib = env.SharedLibrary('lib/libocm.so', ['src/lib.c', 'src/mq.c', 'src/queue.c'])
+libfiles = ['src/lib.c', 'src/pmsg.c', 'src/queue.c', 'src/rdma.c']
+libfiles.append('src/rdma_server.c')
+libfiles.append('src/rdma_client.c')
+solib = env.SharedLibrary('lib/libocm.so', libfiles)
 SConscript(['test/SConscript'])
