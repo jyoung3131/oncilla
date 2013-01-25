@@ -14,9 +14,11 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <errno.h>
 
 /* Project includes */
 #include <io/rdma.h>
+#include <debug.h>
 
 /* Directory includes */
 #include "rdma.h"
@@ -55,9 +57,11 @@ ib_server_connect(struct ib_alloc *ib)
     if (rdma_listen(ib->rdma.listen_id, 1))
         return -1;
 
+    printd("waiting for connection on port %d...\n", ib->params.port);
     if (rdma_get_cm_event(ib->rdma.ch, &ib->rdma.evt)) /* blocks */
         return -1;
 
+    printd("got connection\n");
     if (ib->rdma.evt->event != RDMA_CM_EVENT_CONNECT_REQUEST)
         return -1;
 
@@ -92,8 +96,11 @@ ib_server_connect(struct ib_alloc *ib)
          IBV_ACCESS_REMOTE_WRITE);
 
     if (!(ib->verbs.mr = ibv_reg_mr(ib->verbs.pd, (void*)ib->params.buf,
-                    ib->params.buf_len, mr_flags)))
+                    ib->params.buf_len, mr_flags))) {
+        perror("RDMA memory registration");
         return -1;
+    }
+    printd("registered memory region\n");
 
     ib->verbs.qp_attr.cap.max_send_wr  = 2;
     ib->verbs.qp_attr.cap.max_send_sge = 2;
@@ -108,7 +115,7 @@ ib_server_connect(struct ib_alloc *ib)
     if (rdma_create_qp(ib->rdma.id, ib->verbs.pd, &ib->verbs.qp_attr))
         return -1;
 
-    /* don't need to post a recv */
+    /* don't need to post a recv... */
 #if 0
     struct ibv_sge sge;
     sge.addr    = (uintptr_t) ib->params.buf;
@@ -130,6 +137,8 @@ ib_server_connect(struct ib_alloc *ib)
     struct __pdata_t pdata;
     pdata.buf_rkey = htonl(ib->verbs.mr->rkey);
     pdata.buf_va   = htonll((uintptr_t)ib->params.buf);
+    printd("sending client rkey %u va 0x%llu\n",
+            ib->verbs.mr->rkey, (unsigned long long)ib->params.buf);
 
     ib->rdma.param.responder_resources  = 2;
     ib->rdma.param.private_data         = &pdata;
@@ -138,6 +147,7 @@ ib_server_connect(struct ib_alloc *ib)
     ib->rdma.param.retry_count          = 10;
     ib->rdma.param.rnr_retry_count      = 10;
 
+    printd("accepting connection\n");
     if (rdma_accept(ib->rdma.id, &ib->rdma.param))
         return -1;
 

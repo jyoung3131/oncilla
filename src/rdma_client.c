@@ -21,6 +21,7 @@
 
 /* Project includes */
 #include <io/rdma.h>
+#include <debug.h>
 
 /* Directory includes */
 #include "rdma.h"
@@ -109,8 +110,11 @@ ib_client_connect(struct ib_alloc *ib)
          IBV_ACCESS_REMOTE_WRITE);
 
     if (!(ib->verbs.mr = ibv_reg_mr(ib->verbs.pd, ib->params.buf,
-                    ib->params.buf_len, mr_flags)))
+                    ib->params.buf_len, mr_flags))) {
+        perror("RDMA memory registration");
         return -1;
+    }
+    printd("registered memory\n");
 
     ib->verbs.qp_attr.cap.max_send_wr   = 2;
     ib->verbs.qp_attr.cap.max_send_sge  = 2;
@@ -132,6 +136,7 @@ ib_client_connect(struct ib_alloc *ib)
     ib->rdma.param.retry_count          = 10;
     //ib->rdma.param.rnr_retry_count      = 10;
 
+    printd("connecting to server\n");
     if (rdma_connect(ib->rdma.id, &ib->rdma.param))
         return -1;
 
@@ -145,6 +150,7 @@ ib_client_connect(struct ib_alloc *ib)
     memcpy(&pdata, ib->rdma.evt->param.conn.private_data, sizeof(pdata));
     ib->ibv.buf_rkey   = ntohl(pdata.buf_rkey);
     ib->ibv.buf_va     = ntohll(pdata.buf_va);
+    printd("extracted rkey %u va 0x%llu\n", ib->ibv.buf_rkey, ib->ibv.buf_va);
 
     rdma_ack_cm_event(ib->rdma.evt);
 
