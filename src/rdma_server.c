@@ -100,7 +100,8 @@ ib_server_connect(struct ib_alloc *ib)
         perror("RDMA memory registration");
         return -1;
     }
-    printd("registered memory region\n");
+    printd("registered memory region (%lu bytes)\n",
+            ib->verbs.mr->length);
 
     ib->verbs.qp_attr.cap.max_send_wr  = 2;
     ib->verbs.qp_attr.cap.max_send_sge = 2;
@@ -135,10 +136,12 @@ ib_server_connect(struct ib_alloc *ib)
 
     /* this data is sent to client */
     struct __pdata_t pdata;
-    pdata.buf_rkey = htonl(ib->verbs.mr->rkey);
-    pdata.buf_va   = htonll((uintptr_t)ib->params.buf);
-    printd("sending client rkey %u va 0x%llu\n",
-            ib->verbs.mr->rkey, (unsigned long long)ib->params.buf);
+    pdata.buf_rkey  = htonl(ib->verbs.mr->rkey);
+    pdata.buf_va    = htonll((uintptr_t)ib->params.buf);
+    pdata.buf_len   = htonll(ib->params.buf_len);
+    printd("sending client rkey %u va 0x%llu len %llu\n",
+            ib->verbs.mr->rkey, (unsigned long long)ib->params.buf,
+            (unsigned long long)ib->params.buf_len);
 
     ib->rdma.param.responder_resources  = 2;
     ib->rdma.param.private_data         = &pdata;

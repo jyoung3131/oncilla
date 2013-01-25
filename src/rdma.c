@@ -39,15 +39,18 @@ static LIST_HEAD(ib_allocs);
 
 /* only used by client code */
 static int
-post_send(struct ib_alloc *ib, int opcode, size_t len)
+post_send(struct ib_alloc *ib, int opcode,
+        /* TODO size_t offset (local buffer) */
+        size_t offset /*remote*/, size_t len)
 {
     struct ibv_sge          sge;
     struct ibv_send_wr      wr;
     struct ibv_send_wr      *bad_wr;
 
-    sge.addr   = (uintptr_t) ib->params.buf; /* "from" address */
+    /* "from" address and key */
+    sge.addr   = (uintptr_t)ib->params.buf;
     sge.length = len;
-    sge.lkey   = ib->verbs.mr->lkey; /* "from" key */
+    sge.lkey   = ib->verbs.mr->lkey;
 
     memset(&wr, 0, sizeof(wr));
 
@@ -58,8 +61,9 @@ post_send(struct ib_alloc *ib, int opcode, size_t len)
     wr.send_flags           = IBV_SEND_SIGNALED;
     wr.sg_list              = &sge;
     wr.num_sge              = 1;
-    wr.wr.rdma.rkey         = ib->ibv.buf_rkey; /* "to" key */
-    wr.wr.rdma.remote_addr  = ib->ibv.buf_va; /* "to" address */
+    /* "to" address and key */
+    wr.wr.rdma.rkey         = ib->ibv.buf_rkey;
+    wr.wr.rdma.remote_addr  = ib->ibv.buf_va + offset;
 
     if (ibv_post_send(ib->rdma.id->qp, &wr, &bad_wr)){
         perror("ibv_post_send");
@@ -142,22 +146,34 @@ ib_reg_mr(ib_t ib, void *buf, size_t len)
     return 0;
 }
 
-/* TODO include offset into buf */
+/* TODO Include specifying segments to send, instead of static offsets.  Like,
+ * enqueue a write, then flush the writes
+ */
 
 /* client function: pull data fom server */
 int
-ib_read(ib_t ib, size_t len)
+ib_read(ib_t ib, size_t offset, size_t len)
 {
-    if (!ib) return -1;
-    return post_send(ib, IBV_WR_RDMA_READ, len);
+    if (!ib)
+        return -1;
+    if ((offset + len) > ib->ibv.buf_len) {
+        printd("error: would read past end of remote buffer\n");
+        return -1;
+    }
+    return post_send(ib, IBV_WR_RDMA_READ, offset, len);
 }
 
 /* client function: push data to server */
 int
-ib_write(ib_t ib, size_t len)
+ib_write(ib_t ib, size_t offset, size_t len)
 {
-    if (!ib) return -1;
-    return post_send(ib, IBV_WR_RDMA_WRITE, len);
+    if (!ib || len == 0)
+        return -1;
+    if ((offset + len) > ib->ibv.buf_len) {
+        printd("error: would write past end of remote buffer\n");
+        return -1;
+    }
+    return post_send(ib, IBV_WR_RDMA_WRITE, offset, len);
 }
 
 /* Wait for some event. Code found in manpage of ibv_get_cq_event */

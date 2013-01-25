@@ -114,7 +114,8 @@ ib_client_connect(struct ib_alloc *ib)
         perror("RDMA memory registration");
         return -1;
     }
-    printd("registered memory\n");
+    printd("registered memory region (%lu bytes)\n",
+            ib->verbs.mr->length);
 
     ib->verbs.qp_attr.cap.max_send_wr   = 2;
     ib->verbs.qp_attr.cap.max_send_sge  = 2;
@@ -148,9 +149,11 @@ ib_client_connect(struct ib_alloc *ib)
 
     struct __pdata_t pdata;
     memcpy(&pdata, ib->rdma.evt->param.conn.private_data, sizeof(pdata));
-    ib->ibv.buf_rkey   = ntohl(pdata.buf_rkey);
-    ib->ibv.buf_va     = ntohll(pdata.buf_va);
-    printd("extracted rkey %u va 0x%llu\n", ib->ibv.buf_rkey, ib->ibv.buf_va);
+    ib->ibv.buf_rkey    = ntohl(pdata.buf_rkey);
+    ib->ibv.buf_va      = ntohll(pdata.buf_va);
+    ib->ibv.buf_len     = ntohll(pdata.buf_len);
+    printd("extracted rkey %u va 0x%llu len %llu\n",
+            ib->ibv.buf_rkey, ib->ibv.buf_va, ib->ibv.buf_len);
 
     rdma_ack_cm_event(ib->rdma.evt);
 

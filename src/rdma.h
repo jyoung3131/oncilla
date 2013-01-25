@@ -36,6 +36,7 @@ enum {
 struct __pdata_t {
     uint64_t    buf_va;
     uint64_t    buf_rkey;
+    uint64_t    buf_len;
 };
 
 struct __rdma_t {
@@ -49,6 +50,7 @@ struct __rdma_t {
 struct __ibv_t {
     unsigned long long  buf_va; /* server's buffer start addr sent via pdata */
     unsigned            buf_rkey; /* server's mr->rkey sent via pdata */
+    unsigned long long  buf_len; /* server's buffer length */
     unsigned int        lid;
     unsigned int        qpn;
     unsigned int        psn;
