@@ -29,6 +29,10 @@ enum {
     RESOLVE_TIMEOUT_MS = 5000
 };
 
+/* 
+ * Data structure used to exchange authentication keys and buffer address
+ * between client and server
+ */
 struct __pdata_t {
     uint64_t    buf_va;
     uint64_t    buf_rkey;
@@ -37,18 +41,14 @@ struct __pdata_t {
 struct __rdma_t {
     struct rdma_event_channel   *ch;
     struct rdma_cm_id           *listen_id;
-    struct rdma_cm_id           *id;
+    struct rdma_cm_id           *id; /* TODO only handles one client */
     struct rdma_cm_event        *evt;
     struct rdma_conn_param      param;
 };
 
 struct __ibv_t {
-    /* XXX Why do I need these three items? key values can be found in
-     * ib->verbs.mr
-     */
-    unsigned long long  buf_va;
-    unsigned            buf_rkey;
-    //unsigned            buf_lkey;
+    unsigned long long  buf_va; /* server's buffer start addr sent via pdata */
+    unsigned            buf_rkey; /* server's mr->rkey sent via pdata */
     unsigned int        lid;
     unsigned int        qpn;
     unsigned int        psn;
@@ -59,11 +59,10 @@ struct __verbs_t {
     struct ibv_comp_channel *ch;
     struct ibv_cq           *cq;
     struct ibv_cq           *evt_cq;
-    struct ibv_mr           *mr;
+    struct ibv_mr           *mr; /* mr->lkey is here */
     struct ibv_qp           *qp;
     struct ibv_qp_init_attr qp_attr;
     struct ibv_context      *context;
-    //struct __ibv_t          keys;
 };
 
 struct ib_alloc

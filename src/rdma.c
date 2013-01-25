@@ -22,6 +22,7 @@
 /* Project includes */
 #include <util/list.h>
 #include <io/rdma.h>
+#include <debug.h>
 
 /* Directory includes */
 #include "rdma.h"
@@ -44,21 +45,21 @@ post_send(struct ib_alloc *ib, int opcode, size_t len)
     struct ibv_send_wr      wr;
     struct ibv_send_wr      *bad_wr;
 
-    sge.addr   = (uintptr_t) ib->params.buf;
+    sge.addr   = (uintptr_t) ib->params.buf; /* "from" address */
     sge.length = len;
-    sge.lkey   = ib->verbs.mr->lkey;
+    sge.lkey   = ib->verbs.mr->lkey; /* "from" key */
 
     memset(&wr, 0, sizeof(wr));
 
     wr.wr_id                = 1 /* ignored: user-defined ID */;
     wr.opcode               = opcode;
-    wr.send_flags           = 0;
-    //if (opcode == IBV_WR_RDMA_WRITE)
-        //wr.send_flags   = IBV_SEND_SIGNALED;
+    /* This flag is needed so we can poll on send/recv using the Completion
+     * Queue data structure. */
+    wr.send_flags           = IBV_SEND_SIGNALED;
     wr.sg_list              = &sge;
     wr.num_sge              = 1;
-    wr.wr.rdma.rkey         = ib->ibv.buf_rkey;
-    wr.wr.rdma.remote_addr  = ib->ibv.buf_va;
+    wr.wr.rdma.rkey         = ib->ibv.buf_rkey; /* "to" key */
+    wr.wr.rdma.remote_addr  = ib->ibv.buf_va; /* "to" address */
 
     if (ibv_post_send(ib->rdma.id->qp, &wr, &bad_wr)){
         perror("ibv_post_send");
@@ -73,6 +74,7 @@ post_send(struct ib_alloc *ib, int opcode, size_t len)
 int
 ib_init(void)
 {
+    /* TODO in case we need to add init stuff later */
     return 0;
 }
 
@@ -81,14 +83,15 @@ ib_new(struct ib_params *p)
 {
     struct ib_alloc *ib = NULL;
 
-    if (!p || !p->addr) /* buf and len can be set later */
+    if (!p)
         goto fail;
 
     ib = calloc(1, sizeof(*ib));
     if (!ib)
         goto fail;
 
-    ib->params.addr = strdup(p->addr);
+    if (p->addr) /* only client specifies this */
+        ib->params.addr = strdup(p->addr);
     memcpy(&ib->params, p, sizeof(*p));
 
     INIT_LIST_HEAD(&ib->link);
@@ -157,6 +160,7 @@ ib_write(ib_t ib, size_t len)
     return post_send(ib, IBV_WR_RDMA_WRITE, len);
 }
 
+/* Wait for some event. Code found in manpage of ibv_get_cq_event */
 int
 ib_poll(ib_t ib)
 {
@@ -191,3 +195,6 @@ ib_poll(ib_t ib)
 
     return 0;
 }
+
+/* TODO server functions */
+/* right now the server is stupid, just helps make memory then goes away */

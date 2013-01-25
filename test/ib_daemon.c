@@ -6,50 +6,76 @@
 #include <io/rdma.h>
 #include "../src/rdma.h"
 
-#include "ib_defines.h"
+static ib_t setup(struct ib_params *p)
+{
+    ib_t ib = NULL;
 
-int main(void)
+    if (ib_init())
+        return (ib_t)NULL;
+
+    if (!(ib = ib_new(p)))
+        return (ib_t)NULL;
+
+    if (ib_connect(ib, true/*is server*/))
+        return (ib_t)NULL;
+
+    return ib;
+}
+
+
+static int one_sided_test(void)
 {
     ib_t ib;
     struct ib_params params;
-    volatile struct ib_msg *msg = calloc(1, sizeof(*msg));
+    unsigned int *buf = NULL;
+    size_t count = (1 << 10);
+    size_t len = count * sizeof(*buf);
 
-    params.addr = strdup("asdf");
-    params.port = 12345;
-    params.buf = (void*)msg;
-    params.buf_len = sizeof(*msg);
+    if (!(buf = calloc(count, sizeof(*buf))))
+        return -1;
 
-    if (ib_init()) {
-        fprintf(stderr, "error: ib_init\n");
+    params.addr     = NULL;
+    params.port     = 12345;
+    params.buf      = buf;
+    params.buf_len  = len;
+
+    if (!(ib = setup(&params)))
+        return -1;
+
+    /* wait for client to write entire buffer */
+    while (buf[count - 1] == 0)
+        ;
+
+    /* verify all elements have been updated */
+    size_t i;
+    for (i = 0; i < count; i++)
+        if (buf[i] != 0xdeadbeef)
+            fprintf(stderr, "x");
+
+    /* XXX need to implement teardown() */
+
+    return 0;
+}
+
+static int buffer_size_mismatch_test(void)
+{
+    return -1;
+}
+
+static int bandwidth_test(void)
+{
+    return -1;
+}
+
+// TODO Multiple connections test
+
+// TODO Multiple regions test
+
+int main(void)
+{
+    if (one_sided_test()) {
+        fprintf(stderr, "one_sided_test failed\n");
         return -1;
     }
-
-    if (!(ib = ib_new(&params))) {
-        fprintf(stderr, "error: ib_new\n");
-        return -1;
-    }
-
-    printf("waiting for connection...\n");
-    if (ib_connect(ib, true/*is server*/)) {
-        fprintf(stderr, "error: ib_connect\n");
-        return -1;
-    }
-    printf("got connection\n");
-
-    /*
-     * RDMA reads and writes will be initiated by the client without
-     * our being aware ...
-     *
-     * Loop until the buffer has been modified by the client
-     * indicating a stop.
-     */
-
-    uint64_t last_id = 0UL;
-    while (msg->op != OP_STOP) {
-        if (msg->id <= last_id) { usleep(100); continue; }
-        last_id = msg->id;
-        printf("new msg %02lu: '%s'\n", msg->id, msg->text);
-    }
-
     return 0;
 }
