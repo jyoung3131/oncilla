@@ -1,8 +1,14 @@
 *.o
 *.swp
 *.swo
+*.swn
 *.so
 *.os
 cscope.out
 bin/oncillamem
 .sconsign.dblite
+test/ib_client
+test/ib_daemon
+test/pmsg_client
+test/pmsg_daemon
+test/test
