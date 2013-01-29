@@ -13,7 +13,7 @@ int main(void)
         return -1;
     }
 
-    if (NULL == (alloc = ocm_alloc(ALLOC_SIZE))) {
+    if (NULL == (alloc = ocm_alloc(ALLOC_SIZE, OCM_REMOTE_RDMA))) {
         printf("ocm_alloc failed on size %lu\n", ALLOC_SIZE);
         if (0 > ocm_tini())
             printf("ocm_tini failed\n");
@@ -21,6 +21,14 @@ int main(void)
     }
 
     printf("ocm_alloc returned %p\n", alloc);
+    printf("local buffer is %p\n", ocm_localbuf(alloc));
+
+#if 0
+    if (ocm_free(alloc) < 0) {
+        printf("ocm_free failed\n");
+        return -1;
+    }
+#endif
 
     if (0 > ocm_tini()) {
         printf("ocm_tini failed\n");
