@@ -18,6 +18,11 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <limits.h>
+/* for ib_nic_ip */
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
 
 /* Project includes */
 #include <util/list.h>
@@ -76,6 +81,37 @@ post_send(struct ib_alloc *ib, int opcode,
 /* Public functions */
 
 int
+ib_nic_ip(int idx, char *ip_str, size_t len)
+{
+    int fd;
+    struct ifreq ifr;
+
+    if (!ip_str)
+        return -1;
+
+    len = (len > HOST_NAME_MAX ? HOST_NAME_MAX : len);
+
+    if (0 > (fd = socket(AF_INET, SOCK_DGRAM, 0))) {
+        printd("invalid socket returned\n");
+        return -1;
+    }
+    ifr.ifr_addr.sa_family = AF_INET; /* IPv4 */
+    snprintf(ifr.ifr_name, IFNAMSIZ - 1, "ib%d", idx);
+    //strncpy(ifr.ifr_name, "eth0", IFNAMSIZ-1);
+    if (ioctl(fd, SIOCGIFADDR, &ifr)) {
+        close(fd);
+        printd("ioctl error\n");
+        return -1;
+    }
+    close(fd);
+    strncpy(ip_str,
+            inet_ntoa(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr),
+            len);
+    ip_str[len-1] = '\0'; /* just in case */
+    return 0;
+}
+
+int
 ib_init(void)
 {
     /* TODO in case we need to add init stuff later */
@@ -98,6 +134,7 @@ ib_new(struct ib_params *p)
         ib->params.addr = strdup(p->addr);
     memcpy(&ib->params, p, sizeof(*p));
 
+    /* TODO Lock this list */
     INIT_LIST_HEAD(&ib->link);
     list_add(&ib->link, &ib_allocs);
 

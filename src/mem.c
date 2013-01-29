@@ -42,14 +42,14 @@ static volatile bool handler_alive = false;
 
 /* Private functions */
 
-inline static void
+static void
 send_rank(struct message *m, int to_rank)
 {
     printd("sending to rank %d via MPI\n", to_rank);
     nw_send(m, to_rank);
 }
 
-inline static void
+static void
 send_pid(struct message *m, pid_t to_pid)
 {
     printd("sending to app %d\n", to_pid);
@@ -57,42 +57,66 @@ send_pid(struct message *m, pid_t to_pid)
     q_push(outbox, m);
 }
 
+/* each mpi rank inserts this message when it starts up */
+static int
+process_add_node(struct message *m)
+{
+    BUG(nw_get_rank() > 0);
+    if (alloc_add_node(m->rank, &m->u.node.config))
+        return -1;
+    return 0;
+}
+
 /* message type MSG_REQ_ALLOC */
 static int
 process_req_alloc(struct message *m)
 {
     int err;
-    /* master node receiving new alloc requests from apps */
-    if (m->status == MSG_REQUEST)
-    {
-        BUG(nw_get_rank() != 0);
+    /* new allocation request */
+    if (m->status == MSG_REQUEST) {
+        BUG(nw_get_rank() > 0);
+        struct alloc_ation alloc;
+        printd("got msg from pid %d rank %d\n", m->pid, m->rank);
         /* make request, copy result */
-        struct alloc_ation a;
-        printf("rank0 recv msg: alloc req\n");
-        err = alloc_find(&m->u.req, &a);
+        m->u.req.orig_rank = m->rank;
+        err = alloc_find(&m->u.req, &alloc);
         BUG(err < 0);
-        m->u.alloc = a;
+        m->u.alloc = alloc; /* this assignment destroys req state */
         m->status = MSG_RESPONSE;
+        /* TODO add new allocation to internal list as pending */
         send_rank(m, m->rank); /* return to origin */
     }
-    /* TODO RESP: new msg DO_ALLOC, send to rank */
-    else if (m->status == MSG_RESPONSE)
-    {
-        printf("rank%d recv msg: req_alloc resp -> do_alloc\n",
-                nw_get_rank());
+    else if (m->status == MSG_RESPONSE) {
         m->type = MSG_DO_ALLOC;
         m->status = MSG_REQUEST;
         if (m->u.alloc.type == ALLOC_MEM_HOST) {
-            printd("sending do_alloc to pid %d\n", m->pid);
+            printd("send msg %d to pid %d\n", m->type, m->pid);
             send_pid(m, m->pid);
+        } else if (m->u.alloc.type == ALLOC_MEM_RDMA) {
+            /* rank will set up RDMA CM server, waiting for client to connect.
+             * It will send a DO_ALLOC response, we'll then tell the app to
+             * connect. */
+            printd("send msg %d to rank %d\n", m->type, m->rank);
+            send_rank(m, m->rank); 
         } else if (m->u.alloc.type == ALLOC_MEM_RMA) {
-            printd("sending do_alloc to rank %d\n", m->u.alloc.rank);
-            send_rank(m, m->u.alloc.rank);
+            printd("RMA allocations not yet coded\n");
+            BUG(1);
         } else {
             BUG(1);
         }
     }
     return 0;
+}
+
+static void *
+alloc_thread(void *arg)
+{
+    struct message *m = (struct message*)arg;
+    BUG(!m);
+    printd("thread spawned to wait for client connection\n");
+    alloc_ate(&m->u.alloc); /* initialize RDMA CM server (blocks!) */
+    printd("done\n");
+    pthread_exit(NULL);
 }
 
 /* message type MSG_DO_ALLOC */
@@ -102,25 +126,20 @@ process_req_alloc(struct message *m)
 static int
 process_do_alloc(struct message *m)
 {
-    /* in-coming RMA request from another node */
-    if (m->status == MSG_REQUEST)
-    {
-        printf("rank%d msg: do alloc req, libRMA/glib/cuda alloc\n",
-                nw_get_rank());
-        ABORT2(alloc_ate(&m->u.alloc) < 0);
+    pthread_t pid;
+    /* in-coming RMA/RDMA request from another node */
+    if (m->status == MSG_REQUEST) {
         m->status = MSG_RESPONSE;
-        send_rank(m, m->rank); /* return to origin */
+        send_rank(m, m->rank); /* tell app to connect to us */
+        if (pthread_create(&pid, NULL, alloc_thread, (void*)m))
+            ABORT();
     }
     /* in-coming response from app or rank that it completed a DO_ALLOC request */
-    else if (m->status == MSG_RESPONSE)
-    {
-        printf("rank%d msg: do alloc resp, return to app via MQ\n",
-                nw_get_rank());
+    else if (m->status == MSG_RESPONSE) {
         m->type = MSG_RELEASE_APP;
         m->status = MSG_NO_STATUS;
-        /* XXX put allocation state into message, send to app and rank 0 */
+        /* TODO put allocation state into message, send to app and rank 0 */
         send_pid(m, m->pid);
-        //send_rank(m, m->rank); /* return to app */
     }
     return 0;
 }
@@ -129,19 +148,13 @@ static int
 process_do_free(struct message *m)
 {
     /* TODO REQ: call libRMA/etc, send reply (status to response) */
-    if (m->status == MSG_REQUEST)
-    {
-        printf("rank%d msg: do free req, libRMA/glib/cuda free\n",
-                nw_get_rank());
+    if (m->status == MSG_REQUEST) {
     }
     /* TODO RESP: depends who sent request ...
      *              i) process explicitly requested free: to MQ
      *              ii) process died, drop this message
      */
-    else if (m->status == MSG_RESPONSE)
-    {
-        printf("rank%d msg: do free resp, something\n",
-                nw_get_rank());
+    else if (m->status == MSG_RESPONSE) {
     }
     m->status++;
     return 0;
@@ -166,18 +179,21 @@ queue_handler(void *arg)
 
     printd("mem thread alive\n");
 
-    while (true)
-    {
-        while (!q_empty(&msg_q))
-        {
+    while (true) {
+        while (!q_empty(&msg_q)) {
             if (q_pop(&msg_q, &msg) != 0)
                 BUG(1);
+
+            printd("rank%d recv msg %s [%s]\n", nw_get_rank(),
+                    MSG_TYPE2STR(msg.type), MSG_STATUS2STR(msg.status));
 
             err = 0;
             if (msg.type == MSG_REQ_ALLOC)
                 err = process_req_alloc(&msg);
             else if (msg.type == MSG_DO_ALLOC)
                 err = process_do_alloc(&msg);
+            else if (msg.type == MSG_ADD_NODE)
+                err = process_add_node(&msg);
             else {
                 BUG(1);
             }
@@ -249,7 +265,10 @@ int
 mem_add_msg(struct message *m)
 {
     if (!m) return -1;
-    q_push(&msg_q, m);
+    if (nw_get_rank() > 0)
+        send_rank(m, 0); /* send all messages from app directly to rank 0 */
+    else
+        q_push(&msg_q, m); /* we are rank0, no need to send to ourself */
     return 0;
 }
 

@@ -2,6 +2,10 @@
  * file: nw.h
  * author: Alexander Merritt, merritt.alex@gatech.edu
  * desc: distributed state definitions
+ *
+ * Probably an ill-named file/interface, this is only used for a submodule which
+ * moves messages between daemons, not as a generic network-io interface for
+ * other parts of the code.
  */
 
 #ifndef __NW__

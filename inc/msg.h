@@ -9,6 +9,7 @@
 
 /* System includes */
 #include <stdio.h>
+#include <limits.h>
 
 /* Other project includes */
 
@@ -28,6 +29,8 @@ enum message_type
     MSG_CONNECT_CONFIRM, /* daemon -> app */
 
     MSG_DISCONNECT, /* app -> daemon */
+
+    MSG_ADD_NODE, /* ranks > 0 reporting to rank 0 on bootup */
 
     MSG_REQ_ALLOC, /* alloc_request msg; resp is alloc_ation msg */
     MSG_DO_ALLOC, /* alloc_do message */
@@ -60,13 +63,46 @@ struct message
     union {
         struct alloc_request req;
         struct alloc_ation alloc;
-        struct alloc_do d;
+        struct {
+            struct alloc_node_config config;
+        } node;
     } u;
 };
 
 /* Global state (externs) */
 
 /* Static inline functions */
+
+static inline const char *
+MSG_TYPE2STR(enum message_type t)
+{
+    switch (t) {
+    case MSG_INVALID:           return "MSG_INVALID";
+    case MSG_CONNECT:           return "MSG_CONNECT";
+    case MSG_CONNECT_CONFIRM:   return "MSG_CONNECT_CONFIRM";
+    case MSG_DISCONNECT:        return "MSG_DISCONNECT";
+    case MSG_REQ_ALLOC:         return "MSG_REQ_ALLOC";
+    case MSG_DO_ALLOC:          return "MSG_DO_ALLOC";
+    case MSG_ADD_NODE:          return "MSG_ADD_NODE";
+    case MSG_REQ_FREE:          return "MSG_REQ_FREE";
+    case MSG_DO_FREE:           return "MSG_DO_FREE";
+    case MSG_RELEASE_APP:       return "MSG_RELEASE_APP";
+    case MSG_ANY:               return "MSG_ANY";
+    case MSG_MAX:               return "MSG_MAX";
+    default:                    return "INVALID MSG TYPE";
+    }
+}
+
+static inline const char *
+MSG_STATUS2STR(enum message_status s)
+{
+    switch (s) {
+    case MSG_NO_STATUS: return "MSG_NO_STATUS";
+    case MSG_REQUEST:   return "MSG_REQUEST";
+    case MSG_RESPONSE:  return "MSG_RESPONSE";
+    default:            return "INVALID MSG STATUS";
+    }
+}
 
 /* Function prototypes */
 

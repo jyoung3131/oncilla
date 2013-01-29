@@ -19,7 +19,14 @@
 
 /* Definitions */
 
-typedef void * ocm_alloc_t;
+typedef struct lib_alloc * ocm_alloc_t;
+
+enum ocm_kind
+{
+    OCM_LOCAL = 1,
+    OCM_REMOTE_RMA,
+    OCM_REMOTE_RDMA,
+};
 
 /* Globals */
 
@@ -29,8 +36,13 @@ typedef void * ocm_alloc_t;
 
 int ocm_init(void);
 int ocm_tini(void);
-ocm_alloc_t ocm_alloc(size_t bytes);
+ocm_alloc_t ocm_alloc(size_t bytes, enum ocm_kind kind);
 int ocm_free(ocm_alloc_t a);
+void * ocm_localbuf(ocm_alloc_t a); /* get pointer to local buffer */
+
+int ocm_copy_out(void *dst, ocm_alloc_t src);
+int ocm_copy_in(ocm_alloc_t dst, void *src);
+
 int ocm_copy(ocm_alloc_t dst, ocm_alloc_t src);
 
 #endif  /* __ONCILLAMEM_H__ */

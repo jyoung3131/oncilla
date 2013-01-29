@@ -23,8 +23,8 @@ struct ib_alloc; /* forward declaration */
 typedef struct ib_alloc * ib_t;
 
 struct ib_params {
-    char        *addr; /* TODO used only by client */
-    uint32_t    port;  /* TODO used only by client */
+    char        *addr; /* used only by client */
+    uint32_t    port;
     void        *buf;
     size_t      buf_len;
 };
@@ -36,10 +36,11 @@ struct ib_params {
 int ib_init(void);
 ib_t ib_new(struct ib_params *p);
 int ib_connect(ib_t ib, bool is_server);
-int ib_reg_mr(ib_t ib, void *buf, size_t len);
-int ib_read(ib_t ib, size_t len);
-int ib_write(ib_t ib, size_t len);
+int ib_read(ib_t ib, size_t offset, size_t len);
+int ib_write(ib_t ib, size_t offset, size_t len);
 int ib_poll(ib_t ib);
+
+int ib_nic_ip(int idx /* ibN */, char *ip_str, size_t len);
 
 /* TODO include func to change remote mapping of local buf */
 

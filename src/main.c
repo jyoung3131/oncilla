@@ -59,6 +59,7 @@ process_msg(struct message *msg)
 
     case MSG_CONNECT:
     {
+        printd("app %d connecting\n", msg->pid);
         app = calloc(1, sizeof(*app));
         ABORT2(!app);
         INIT_LIST_HEAD(&app->link);
@@ -142,6 +143,25 @@ launch_poll_thread(void)
     return 0;
 }
 
+static int
+notify_rank0(void)
+{
+    struct message msg;
+    printd("notifying rank 0 of our join\n");
+    msg.type    = MSG_ADD_NODE;
+    msg.status  = MSG_NO_STATUS;    /* not used */
+    msg.pid     = -1;               /* not used */
+    msg.rank    = nw_get_rank();
+    memset(&msg.u.node.config, 0, sizeof(msg.u.node.config)); /* TODO */
+    if (gethostname(msg.u.node.config.hostname, HOST_NAME_MAX))
+        return -1;
+    if (ib_nic_ip(0, msg.u.node.config.ib_ip, HOST_NAME_MAX))
+        return -1;
+    if (mem_add_msg(&msg))
+        return -1;
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     printd("Verbose printing enabled\n");
@@ -172,6 +192,11 @@ int main(int argc, char *argv[])
 
     if (mem_launch() < 0) {
         fprintf(stderr, "error launching\n");
+        return -1;
+    }
+
+    if (notify_rank0()) {
+        printd("notify rank0 failed\n");
         return -1;
     }
 

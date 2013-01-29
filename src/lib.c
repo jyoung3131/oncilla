@@ -24,6 +24,32 @@
 
 /* Internal definitions */
 
+struct lib_alloc {
+    struct list_head link;
+    enum ocm_kind kind;
+    /* TODO Later, when allocations are composed of partitioned distributed
+     * allocations, this will no longer be a single union, but an array of them,
+     * to accomodate the heterogeneity in allocations.
+     */
+    union {
+        struct {
+            ib_t ib;
+            int remote_rank;
+            size_t remote_bytes;
+            size_t local_bytes;
+            void *local_ptr;
+        } rdma;
+        struct {
+            /* TODO */
+        } rma;
+        struct {
+            size_t bytes;
+            void *ptr;
+        } local;
+        /* TODO GPU? Not sure where that would fit. */
+    } u;
+};
+
 #define for_each_alloc(alloc, allocs) \
     list_for_each_entry(alloc, &allocs, link)
 #define lock_allocs()   pthread_mutex_lock(&allocs_lock)
@@ -31,7 +57,7 @@
 
 /* Internal state */
 
-static LIST_HEAD(allocs); /* list of struct alloc_ation */
+static LIST_HEAD(allocs); /* list of lib_alloc */
 static pthread_mutex_t allocs_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Private functions */
@@ -63,6 +89,11 @@ ocm_init(void)
     if (tries <= 0) {
         printd("cannot open daemon mailbox\n");
         pmsg_close();
+        return -1;
+    }
+
+    if (ib_init()) {
+        printd("ib failed to initialize\n");
         return -1;
     }
 
@@ -115,12 +146,13 @@ ocm_tini(void)
 }
 
 ocm_alloc_t
-ocm_alloc(size_t bytes)
+ocm_alloc(size_t bytes, enum ocm_kind kind)
 {
     struct message msg;
-    struct alloc_ation *a = calloc(1, sizeof(*a));
+    struct lib_alloc *lib_alloc = calloc(1, sizeof(*lib_alloc));
+    struct alloc_ation *msg_alloc = NULL;
 
-    if (!a) {
+    if (!lib_alloc) {
         fprintf(stderr, "Out of memory\n");
         return NULL;
     }
@@ -128,52 +160,121 @@ ocm_alloc(size_t bytes)
     msg.type = MSG_REQ_ALLOC;
     msg.status = MSG_REQUEST;
     msg.pid = getpid();
-    /* u.req.orig_rank filled out by daemon */
     msg.u.req.bytes = bytes;
+
+    if (kind == OCM_LOCAL)
+        msg.u.req.type = ALLOC_MEM_HOST;
+    else if (kind == OCM_REMOTE_RDMA)
+        msg.u.req.type = ALLOC_MEM_RDMA;
+    else if (kind == OCM_REMOTE_RMA)
+        return NULL; /* TODO */
+    else
+        return NULL;
     
     printd("msg sent to daemon\n");
-    if (0 > pmsg_send(PMSG_DAEMON_PID, &msg))
+    if (pmsg_send(PMSG_DAEMON_PID, &msg))
         return NULL;
 
     printd("waiting for reply from daemon\n");
-    if (0 > pmsg_recv(&msg, true))
+    if (pmsg_recv(&msg, true))
         return NULL;
-    printd("got a reply\n");
-    while (msg.type == MSG_DO_ALLOC) {
-        struct alloc_ation *a = &msg.u.alloc;
-        msg.status = MSG_RESPONSE;
-        if (ALLOC_MEM_HOST == a->type) {
-            printd("got alloc mem msg, calling malloc\n");
-            a->ptr = (uintptr_t)malloc(a->bytes);
-            ABORT2(!a->ptr);
-            if (0 > pmsg_send(PMSG_DAEMON_PID, &msg))
-                return NULL;
-        } else {
-            BUG(1);
-        }
-        printd("waiting for next message from daemon...\n");
-        if (0 > pmsg_recv(&msg, true))
-            return NULL;
-    }
 
     if (msg.type != MSG_RELEASE_APP)
         BUG(1);
-    printd("got release msg from daemon\n");
 
-    memcpy(a, &msg.u.alloc, sizeof(*a));
-    INIT_LIST_HEAD(&a->link);
+    msg_alloc = &msg.u.alloc;
+    msg.status = MSG_RESPONSE;
 
-    lock_allocs();
-    list_add(&a->link, &allocs);
-    unlock_allocs();
+    if (ALLOC_MEM_HOST == msg_alloc->type) {
+        printd("ALLOC_MEM_HOST %lu bytes\n", msg_alloc->bytes);
+        lib_alloc->kind             = msg_alloc->type;
+        lib_alloc->u.local.bytes    = msg_alloc->bytes;
+        lib_alloc->u.local.ptr      = malloc(msg_alloc->bytes);
+        ABORT2(!lib_alloc->u.local.ptr);
+    }
 
-    return a;
+    else if (ALLOC_MEM_RDMA == msg_alloc->type) {
+        printd("ALLOC_MEM_RDMA %lu bytes\n", msg_alloc->bytes);
+        struct ib_params p;
+        p.addr      = strdup(msg_alloc->u.rdma.ib_ip);
+        p.port      = msg_alloc->u.rdma.port;
+        p.buf_len   = (1 << 10); /* XXX accept func param for this */
+        p.buf       = malloc(p.buf_len);
+        if (!p.buf)
+            ABORT();
+
+        printd("RDMA: local buf %lu bytes <-->"
+                " server %s:%d (rank %d) buf %lu bytes\n",
+                p.buf_len, p.addr, p.port, msg_alloc->remote_rank, msg_alloc->bytes);
+
+        if (!(lib_alloc->u.rdma.ib = ib_new(&p))) {
+            printd("error allocating new ib state\n");
+            return NULL;
+        }
+        INIT_LIST_HEAD(&lib_alloc->link);
+        lib_alloc->kind                 = msg_alloc->type;
+        lib_alloc->u.rdma.remote_rank   = msg_alloc->remote_rank;
+        lib_alloc->u.rdma.remote_bytes  = msg_alloc->bytes;
+        lib_alloc->u.rdma.local_bytes   = p.buf_len;
+        lib_alloc->u.rdma.local_ptr     = p.buf;
+
+        if (!ib_connect(lib_alloc->u.rdma.ib, false)) {
+            printd("error connecting to server\n");
+            return NULL;
+        }
+
+        printd("adding new lib_alloc to list\n");
+        lock_allocs();
+        list_add(&lib_alloc->link, &allocs);
+        unlock_allocs();
+
+        free(p.addr);
+        p.addr = NULL;
+    }
+
+    else if (ALLOC_MEM_RMA == msg_alloc->type) {
+        BUG(1); /* TODO path not implemented... */
+    }
+
+    else {
+        BUG(1); /* protocol error */
+    }
+
+    return lib_alloc;
 }
 
 int
 ocm_free(ocm_alloc_t a)
 {
     ABORT(); /* XXX Code the protocol. */
+}
+
+void *
+ocm_localbuf(ocm_alloc_t a)
+{
+    void *buf = NULL;
+    if (!a)
+        return NULL;
+    if (a->kind == OCM_LOCAL) {
+        buf = a->u.local.ptr;
+    } else if (a->kind == OCM_REMOTE_RDMA) {
+        buf = a->u.rdma.local_ptr;
+    } else if (a->kind == OCM_REMOTE_RMA) {
+        BUG(1);
+    } else {
+        BUG(1);
+    }
+    return buf;
+}
+
+int ocm_copy_out(void *dst, ocm_alloc_t src)
+{
+    return -1;
+}
+
+int ocm_copy_in(ocm_alloc_t dst, void *src)
+{
+    return -1;
 }
 
 int
