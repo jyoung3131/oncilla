@@ -113,7 +113,7 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 
     alloc->orig_rank    = req->orig_rank;
     alloc->type         = req->type;
-    alloc->bytes        = req->bytes; /* validate size will fit on node */
+    alloc->bytes        = req->bytes; /* TODO validate size will fit on node */
 
     if (req->type == ALLOC_MEM_HOST)
         alloc->remote_rank = req->orig_rank;
