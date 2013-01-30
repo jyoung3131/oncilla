@@ -249,22 +249,38 @@ ocm_free(ocm_alloc_t a)
     ABORT(); /* XXX Code the protocol. */
 }
 
-void *
-ocm_localbuf(ocm_alloc_t a)
+int
+ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 {
-    void *buf = NULL;
-    if (!a)
-        return NULL;
+    if (!a) return -1;
     if (a->kind == OCM_LOCAL) {
-        buf = a->u.local.ptr;
+        *buf = a->u.local.ptr;
+        *len = a->u.local.bytes;
     } else if (a->kind == OCM_REMOTE_RDMA) {
-        buf = a->u.rdma.local_ptr;
+        *buf = a->u.rdma.local_ptr;
+        *len = a->u.rdma.local_bytes;
     } else if (a->kind == OCM_REMOTE_RMA) {
         BUG(1);
     } else {
         BUG(1);
     }
-    return buf;
+    return 0;
+}
+
+int
+ocm_remote_sz(ocm_alloc_t a, size_t *len)
+{
+    if (!a) return -1;
+    if (a->kind == OCM_LOCAL) {
+        return -1; /* there exists no remote buffer */
+    } else if (a->kind == OCM_REMOTE_RDMA) {
+        *len = a->u.rdma.remote_bytes;
+    } else if (a->kind == OCM_REMOTE_RMA) {
+        BUG(1);
+    } else {
+        BUG(1);
+    }
+    return 0;
 }
 
 int ocm_copy_out(void *dst, ocm_alloc_t src)

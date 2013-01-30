@@ -38,7 +38,12 @@ int ocm_init(void);
 int ocm_tini(void);
 ocm_alloc_t ocm_alloc(size_t bytes, enum ocm_kind kind);
 int ocm_free(ocm_alloc_t a);
-void * ocm_localbuf(ocm_alloc_t a); /* get pointer to local buffer */
+
+/* get pointer to local buffer */
+int ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len);
+
+/* get size of remote buffer */
+int ocm_remote_sz(ocm_alloc_t a, size_t *len);
 
 int ocm_copy_out(void *dst, ocm_alloc_t src);
 int ocm_copy_in(ocm_alloc_t dst, void *src);
