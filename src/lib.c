@@ -218,7 +218,7 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
         lib_alloc->u.rdma.local_bytes   = p.buf_len;
         lib_alloc->u.rdma.local_ptr     = p.buf;
 
-        if (!ib_connect(lib_alloc->u.rdma.ib, false)) {
+        if (ib_connect(lib_alloc->u.rdma.ib, false)) {
             printd("error connecting to server\n");
             return NULL;
         }
