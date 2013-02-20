@@ -108,6 +108,7 @@ process_req_alloc(struct message *m)
     return 0;
 }
 
+/* XXX refactor this somehow.. ugly use of a thread? */
 static void *
 alloc_thread(void *arg)
 {
@@ -116,6 +117,8 @@ alloc_thread(void *arg)
     printd("thread spawned to wait for client connection\n");
     alloc_ate(&m->u.alloc); /* initialize RDMA CM server (blocks!) */
     printd("done\n");
+    free(m);
+    m = NULL;
     pthread_exit(NULL);
 }
 
@@ -127,11 +130,14 @@ static int
 process_do_alloc(struct message *m)
 {
     pthread_t pid;
+    struct message *mptr = malloc(sizeof(*mptr));
+    ABORT2(!mptr);
+    *mptr = *m;
     /* in-coming RMA/RDMA request from another node */
     if (m->status == MSG_REQUEST) {
         m->status = MSG_RESPONSE;
         send_rank(m, m->rank); /* tell app to connect to us */
-        if (pthread_create(&pid, NULL, alloc_thread, (void*)m))
+        if (pthread_create(&pid, NULL, alloc_thread, (void*)mptr))
             ABORT();
     }
     /* in-coming response from app or rank that it completed a DO_ALLOC request */
