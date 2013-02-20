@@ -517,12 +517,13 @@ pmsg_cleanup(void)
     printd("maxpid=%d\n", maxpid);
 
     /* 1 is init, MQ will never exist */
+    fprintf(stderr, "> (info) removing lingering MQs ..\n");
     for (pid = 2; pid <= maxpid; pid++) {
         snprintf(name, MAX_LEN, "%s%d", ATTACH_NAME_PREFIX, pid);
         if (0 > mq_unlink(name)) {
             if (errno == ENOENT)
                 continue;
-            fprintf(stderr, "> Error unlinking MQ %s: %s\n",
+            fprintf(stderr, "> (warn) could not remove MQ %s: %s\n",
                     name, strerror(errno));
         }
         num_cleaned++;
@@ -530,9 +531,12 @@ pmsg_cleanup(void)
 
     snprintf(name, MAX_LEN, "%s", ATTACH_DAEMON_MQ_NAME);
     if (mq_unlink(name) < 0)
-        perror("removing daemon mq");
+        if (errno != ENOENT)
+            fprintf(stderr, "> (err) could not remove daemon MQ: %s\n",
+                    strerror(errno));
 
-    printf("> Cleaned %d lingering pmsg mailboxes\n", num_cleaned);
+    fprintf(stderr, "> (info) cleaned %d lingering pmsg mailboxes\n",
+            num_cleaned);
 
     return 0;
 

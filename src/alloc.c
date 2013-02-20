@@ -169,6 +169,7 @@ alloc_ate(struct alloc_ation *alloc)
         ABORT2(!p.buf);
         if (!(ib = ib_new(&p)))
             ABORT();
+        printd("RDMA: wait for client on port %d\n", p.port);
         if (ib_connect(ib, true))
             ABORT();
     }
