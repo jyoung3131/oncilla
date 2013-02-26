@@ -26,7 +26,7 @@ static ib_t setup(struct ib_params *p)
 		return (ib_t)NULL;
 
   TIMER_END(ib_connect_timer, ib_setup_ns);
-  printf("Time for ib_connect (server): %lu ns\n", ib_setup_ns);
+  printf("[CONNECT] Time for ib_connect (server): %lu ns\n", ib_setup_ns);
   //Destroy the timer once we are done with it
   //TIMER_DESTROY(ib_connect_timer);
 
@@ -46,7 +46,7 @@ static int teardown(ib_t ib)
 		ret = -1;
 
   TIMER_END(ib_disconnect_timer, ib_teardown_ns);
-  printf("Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
+  printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
   //Destroy the timer once we are done with it
   //TIMER_DESTROY(ib_disconnect_timer);
 

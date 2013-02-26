@@ -97,7 +97,9 @@ ib_server_connect(struct ib_alloc *ib)
          IBV_ACCESS_REMOTE_READ |
          IBV_ACCESS_REMOTE_WRITE);
 
+  #ifdef TIMING    
   uint64_t ib_mem_reg_ns = 0;
+  #endif
   TIMER_DECLARE1(ib_server_timer);
   TIMER_START(ib_server_timer);
 
@@ -108,7 +110,10 @@ ib_server_connect(struct ib_alloc *ib)
     }
   
     TIMER_END(ib_server_timer, ib_mem_reg_ns);
-  printf("Time for ibv_reg_mr: %lu \n", ib_mem_reg_ns);
+
+#ifdef TIMING
+  printf("[CONNECT] Time for ibv_reg_mr: %lu \n", ib_mem_reg_ns);
+#endif
   //Reset the timer so it can be reused
   TIMER_CLEAR(ib_server_timer);
   
@@ -125,13 +130,18 @@ ib_server_connect(struct ib_alloc *ib)
 
     ib->verbs.qp_attr.qp_type = IBV_QPT_RC;
 
+  #ifdef TIMING    
   uint64_t ib_create_qp_ns = 0;
+#endif
   TIMER_START(ib_server_timer);
     if (rdma_create_qp(ib->rdma.id, ib->verbs.pd, &ib->verbs.qp_attr))
         return -1;
   
   TIMER_END(ib_server_timer, ib_create_qp_ns);
-  printf("Time for rdma_create_qp: %lu ns\n", ib_create_qp_ns);
+  
+#ifdef TIMING
+  printf("[CONNECT] Time for rdma_create_qp: %lu ns\n", ib_create_qp_ns);
+#endif
 
     /* don't need to post a recv... */
 #if 0
@@ -203,14 +213,39 @@ ib_server_disconnect(struct ib_alloc *ib)
   //
   int rc = 0;
 
-  //Destroy the queue pair - returns void
-  rdma_destroy_qp(ib->rdma.id);
+  #ifdef TIMING    
+  uint64_t ib_total_disconnect_ns = 0;
+  uint64_t ib_fine_disconnect_ns = 0;
+  #endif
 
+  TIMER_DECLARE1(ib_disconnect_timer);
+  TIMER_START(ib_disconnect_timer);
+
+  TIMER_DECLARE1(ib_dis_fine_timer);
+  TIMER_START(ib_dis_fine_timer);
+    //Destroy the queue pair - returns void
+    rdma_destroy_qp(ib->rdma.id);
+  TIMER_END(ib_dis_fine_timer, ib_fine_disconnect_ns);
+  #ifdef TIMING
+    printf("[DISCONNECT] Time for rdma_destroy_qp: %lu ns \n", ib_fine_disconnect_ns);
+  #endif
+  //Reset the timer so it can be reused
+  TIMER_CLEAR(ib_dis_fine_timer);
+
+  //------deregister pinned pages---------
+  TIMER_START(ib_dis_fine_timer);
   if (ibv_dereg_mr(ib->verbs.mr))
   {
     fprintf(stderr, "failed to deregister MR\n");
     rc = 1;
   }
+  TIMER_END(ib_dis_fine_timer, ib_fine_disconnect_ns);
+  #ifdef TIMING
+    printf("[DISCONNECT] Time for ibv_dereg_mr: %lu ns \n", ib_fine_disconnect_ns);
+  #endif
+  //Reset the timer so it can be reused
+  TIMER_CLEAR(ib_dis_fine_timer);
+
 
   //Make sure to free the buffer, ib->ib_params.buf in the dealloc function
   //free(res->buf);
@@ -237,6 +272,13 @@ ib_server_disconnect(struct ib_alloc *ib)
   rdma_destroy_id(ib->rdma.id);
 
   rdma_destroy_event_channel(ib->rdma.ch);
+
+  TIMER_END(ib_disconnect_timer, ib_total_disconnect_ns);
+
+  #ifdef TIMING
+    printf("[DISCONNECT] Total time for ib_client_disconnect: %lu ns \n", ib_total_disconnect_ns);
+  #endif
+
 
   return rc;
 }

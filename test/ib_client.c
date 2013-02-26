@@ -9,6 +9,7 @@
 #include "../src/rdma.h"
 #include <util/timer.h>
 #include <math.h>
+#include "../src/rdma.h"
 
 static char *serverIP = NULL;
 
@@ -22,17 +23,17 @@ static ib_t setup(struct ib_params *p)
     if (!(ib = ib_new(p)))
         return (ib_t)NULL;
 
-    uint64_t ib_setup_ns = 0;
     TIMER_DECLARE1(ib_connect_timer);
     TIMER_START(ib_connect_timer);
 
     if (ib_connect(ib, false/*is client*/))
         return (ib_t)NULL;
 
-    TIMER_END(ib_connect_timer, ib_setup_ns);
     
     #ifdef TIMING
-      printf("Time for ib_connect: %lu ns\n", ib_setup_ns);
+    uint64_t ib_setup_ns = 0;
+    TIMER_END(ib_connect_timer, ib_setup_ns);
+      printf("[CONNECT] Time for ib_connect: %lu ns\n", ib_setup_ns);
     #endif
 
     return ib;
@@ -43,16 +44,16 @@ static int teardown(ib_t ib)
 {
     int ret = 0;
 
-    uint64_t ib_teardown_ns = 0;
     TIMER_DECLARE1(ib_disconnect_timer);
     TIMER_START(ib_disconnect_timer);
 
     if (ib_disconnect(ib, false/*is client*/))
       ret = 1;
 
-    TIMER_END(ib_disconnect_timer, ib_teardown_ns);
     #ifdef TIMING
-    printf("Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
+    uint64_t ib_teardown_ns = 0;
+    TIMER_END(ib_disconnect_timer, ib_teardown_ns);
+    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
     #endif
    
     //Free the IB structure

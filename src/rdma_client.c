@@ -111,7 +111,9 @@ ib_client_connect(struct ib_alloc *ib)
          IBV_ACCESS_REMOTE_READ |
          IBV_ACCESS_REMOTE_WRITE);
   
+  #ifdef TIMING
     uint64_t ib_mem_reg_ns = 0;
+  #endif
   TIMER_DECLARE1(ib_client_timer);
   TIMER_START(ib_client_timer);
 
@@ -123,7 +125,7 @@ ib_client_connect(struct ib_alloc *ib)
   
     TIMER_END(ib_client_timer, ib_mem_reg_ns);
   #ifdef TIMING
-    printf("Time for ibv_reg_mr: %lu ns \n", ib_mem_reg_ns);
+    printf("[CONNECT] Time for ibv_reg_mr: %lu ns \n", ib_mem_reg_ns);
   #endif
   //Reset the timer so it can be reused
   TIMER_CLEAR(ib_client_timer);
@@ -140,8 +142,11 @@ ib_client_connect(struct ib_alloc *ib)
     ib->verbs.qp_attr.recv_cq   = ib->verbs.cq;
 
     ib->verbs.qp_attr.qp_type   = IBV_QPT_RC;
-  
+ 
+
+  #ifdef TIMING
     uint64_t ib_create_qp_ns = 0;
+  #endif
   TIMER_START(ib_client_timer);
 
     if (rdma_create_qp(ib->rdma.id, ib->verbs.pd, &ib->verbs.qp_attr))
@@ -149,7 +154,7 @@ ib_client_connect(struct ib_alloc *ib)
   
     TIMER_END(ib_client_timer, ib_create_qp_ns);
   #ifdef TIMING
-    printf("Time for rdma_create_qp: %lu ns\n", ib_create_qp_ns);
+    printf("[CONNECT] Time for rdma_create_qp: %lu ns\n", ib_create_qp_ns);
   #endif
 
     /* 3. Connect to server */
@@ -205,8 +210,10 @@ ib_client_disconnect(struct ib_alloc *ib)
 
   int rc = 0;
 
+  #ifdef TIMING
   uint64_t ib_total_disconnect_ns = 0;
   uint64_t ib_fine_disconnect_ns = 0;
+  #endif
 
   TIMER_DECLARE1(ib_disconnect_timer);
   TIMER_START(ib_disconnect_timer);
@@ -238,7 +245,6 @@ ib_client_disconnect(struct ib_alloc *ib)
   //Reset the timer so it can be reused
   TIMER_CLEAR(ib_dis_fine_timer);
 
-
   //Make sure to free the buffer, ib->ib_params.buf in the dealloc function
   //free(res->buf);
 
@@ -267,7 +273,7 @@ ib_client_disconnect(struct ib_alloc *ib)
 
   TIMER_END(ib_disconnect_timer, ib_total_disconnect_ns);
   #ifdef TIMING
-    printf("Total time for ib_client_disconnect: %lu ns \n", ib_total_disconnect_ns);
+    printf("[DISCONNECT] Total time for ib_client_disconnect: %lu ns \n", ib_total_disconnect_ns);
   #endif
 
   printf("Successfully destroyed all IB and RDMA CM objects\n");
