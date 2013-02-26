@@ -144,6 +144,27 @@ fail:
     return (ib_t)NULL;
 }
 
+//Free the IB allocation object
+int
+ib_free(ib_t ib)
+{
+    int ret = 0;
+
+    //Free the buffer in the ib->params struct
+    if(ib->params.buf)
+      free(ib->params.buf);
+
+    //Delete the IB object from the list
+    list_del(&(ib->link));
+
+    //Free the IB object
+    free(ib);
+    return ret;
+
+}
+
+
+
 /* TODO provide an accept and connect separately, instead of the bool */
 int
 ib_connect(ib_t ib, bool is_server)
@@ -160,6 +181,24 @@ ib_connect(ib_t ib, bool is_server)
 
     return err;
 }
+
+int
+ib_disconnect(ib_t ib, bool is_server)
+{
+    int err;
+
+    if (!ib)
+        return -1;
+
+    if (is_server)
+        err = ib_server_disconnect((struct ib_alloc*)ib);
+    else
+        err = ib_client_disconnect((struct ib_alloc*)ib);
+
+    return err;
+}
+
+
 
 int
 ib_reg_mr(ib_t ib, void *buf, size_t len)

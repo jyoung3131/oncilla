@@ -15,9 +15,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <time.h>
 
 /* Project includes */
 #include <io/rdma.h>
+#include <util/timer.h>
 #include <debug.h>
 
 /* Directory includes */
@@ -95,11 +97,21 @@ ib_server_connect(struct ib_alloc *ib)
          IBV_ACCESS_REMOTE_READ |
          IBV_ACCESS_REMOTE_WRITE);
 
+  uint64_t ib_mem_reg_ns = 0;
+  TIMER_DECLARE1(ib_server_timer);
+  TIMER_START(ib_server_timer);
+
     if (!(ib->verbs.mr = ibv_reg_mr(ib->verbs.pd, (void*)ib->params.buf,
                     ib->params.buf_len, mr_flags))) {
         perror("RDMA memory registration");
         return -1;
     }
+  
+    TIMER_END(ib_server_timer, ib_mem_reg_ns);
+  printf("Time for ibv_reg_mr: %lu \n", ib_mem_reg_ns);
+  //Reset the timer so it can be reused
+  TIMER_CLEAR(ib_server_timer);
+  
     printd("registered memory region (%lu bytes)\n",
             ib->verbs.mr->length);
 
@@ -113,8 +125,13 @@ ib_server_connect(struct ib_alloc *ib)
 
     ib->verbs.qp_attr.qp_type = IBV_QPT_RC;
 
+  uint64_t ib_create_qp_ns = 0;
+  TIMER_START(ib_server_timer);
     if (rdma_create_qp(ib->rdma.id, ib->verbs.pd, &ib->verbs.qp_attr))
         return -1;
+  
+  TIMER_END(ib_server_timer, ib_create_qp_ns);
+  printf("Time for rdma_create_qp: %lu ns\n", ib_create_qp_ns);
 
     /* don't need to post a recv... */
 #if 0
@@ -163,4 +180,63 @@ ib_server_connect(struct ib_alloc *ib)
     rdma_ack_cm_event(ib->rdma.evt);
 
     return 0;
+}
+  int
+ib_server_disconnect(struct ib_alloc *ib)
+{
+  ////////////////////
+  //IB Verbs events
+  //////////////////////
+  //-rdma_destroy_qp (use this instead of ibv_destroy_qp since we created the qp with rdma_create_qp)
+  //-ibv_dereg_mr
+  //-Can free the buffer at this point
+  //-ibv_destroy_cq
+  //-ibv_destroy_comp_channel
+  //-ibv_dealloc_pd
+  ////If we were using ibv device directly we would also need to call ibv_close_device
+  //
+  //////////////////////
+  //Connection Manager events
+  //////////////////////
+  //-rdma_destroy_id
+  //-rdma_destroy_event_channel
+  //
+  int rc = 0;
+
+  //Destroy the queue pair - returns void
+  rdma_destroy_qp(ib->rdma.id);
+
+  if (ibv_dereg_mr(ib->verbs.mr))
+  {
+    fprintf(stderr, "failed to deregister MR\n");
+    rc = 1;
+  }
+
+  //Make sure to free the buffer, ib->ib_params.buf in the dealloc function
+  //free(res->buf);
+
+
+  if (ibv_destroy_cq(ib->verbs.cq))
+  {
+    fprintf(stderr, "failed to destroy CQ\n");
+    rc = 1;
+  }
+
+  if (ibv_destroy_comp_channel(ib->verbs.ch))
+  {
+    fprintf(stderr, "failed to destroy CQ channel\n");
+    rc = 1;
+  }
+
+  if (ibv_dealloc_pd(ib->verbs.pd))
+  {
+    fprintf(stderr, "failed to deallocate PD\n");
+    rc = 1;
+  }
+
+  rdma_destroy_id(ib->rdma.id);
+
+  rdma_destroy_event_channel(ib->rdma.ch);
+
+  return rc;
 }

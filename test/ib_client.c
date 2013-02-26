@@ -3,9 +3,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <debug.h>
+#include <time.h>
 
 #include <io/rdma.h>
 #include "../src/rdma.h"
+#include <util/timer.h>
+#include <math.h>
 
 static char *serverIP = NULL;
 
@@ -19,24 +22,81 @@ static ib_t setup(struct ib_params *p)
     if (!(ib = ib_new(p)))
         return (ib_t)NULL;
 
+    uint64_t ib_setup_ns = 0;
+    TIMER_DECLARE1(ib_connect_timer);
+    TIMER_START(ib_connect_timer);
+
     if (ib_connect(ib, false/*is client*/))
         return (ib_t)NULL;
+
+    TIMER_END(ib_connect_timer, ib_setup_ns);
+    
+    #ifdef TIMING
+      printf("Time for ib_connect: %lu ns\n", ib_setup_ns);
+    #endif
 
     return ib;
 }
 
-static int teardown(void)
+//Return 0 on success and 1 on failure
+static int teardown(ib_t ib)
 {
-    return -1;
+    int ret = 0;
+
+    uint64_t ib_teardown_ns = 0;
+    TIMER_DECLARE1(ib_disconnect_timer);
+    TIMER_START(ib_disconnect_timer);
+
+    if (ib_disconnect(ib, false/*is client*/))
+      ret = 1;
+
+    TIMER_END(ib_disconnect_timer, ib_teardown_ns);
+    #ifdef TIMING
+    printf("Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
+    #endif
+   
+    //Free the IB structure
+    if(ib_free(ib))
+      ret = -1;
+
+    return ret;
 }
 
-/* Does a simple write/read to/from remote memory. */
-static int one_sided_test(void)
+/* Does simple allocation test - for testing setup times*/
+static int alloc_test(long long unsigned int size_B)
 {
     ib_t ib;
     struct ib_params params;
     unsigned int *buf = NULL;
-    size_t count = (1 << 10);
+    //size_t count = size; // (1 << 10);
+    size_t len = size_B * sizeof(*buf);
+
+    if (!(buf = calloc(size_B, sizeof(*buf))))
+        return -1;
+
+    params.addr     = serverIP;
+    params.port     = 12345;
+    params.buf      = buf;
+    params.buf_len  = len;
+
+    if (!(ib = setup(&params)))
+        return -1;
+
+    if(teardown(ib) != 0)
+          return -1;
+    
+    /*Return 0 on succes*/
+    return 0;
+
+}
+
+/* Does a simple write/read to/from remote memory. */
+static int one_sided_test(long long unsigned int size_B)
+{
+    ib_t ib;
+    struct ib_params params;
+    unsigned int *buf = NULL;
+    size_t count = size_B; // (1 << 10);
     size_t len = count * sizeof(*buf);
     size_t i;
 
@@ -68,7 +128,11 @@ static int one_sided_test(void)
         if (buf[i] != 0xdeadbeef)
             return -1;
 
-    /* XXX need to implement teardown() */
+    //Perform teardown
+    if(teardown(ib) != 0)
+      return -1;
+
+
 
     return 0; /* test passed */
 }
@@ -120,7 +184,9 @@ static int buffer_size_mismatch_test(void)
     if (ib_write(ib, 0, len) || ib_poll(ib))
         return -1;
 
-    /* XXX need to implement teardown() */
+    //Perform teardown
+    if(teardown(ib) != 0)
+      return -1;
 
     return 0;
 }
@@ -133,16 +199,24 @@ static int buffer_size_mismatch_test(void)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3) {
+    if (argc != 4) {
 usage:
-        fprintf(stderr, "Usage: %s server_ip test_id\n"
-                "\ttest_id: [0-1]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <server_ip=10.0.0.[1=ifrit or 2=shiva]> <test_num> <alloc_size_MB>\n"
+                "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc\n"
+                "\talloc_size: can be specified in any positive decimal format\n", argv[0]);
         return -1;
     }
     serverIP = argv[1];
+
+    //Convert the double value for MB input to bytes
+    double reg_size_MB = strtod(argv[3], 0);
+    uint64_t reg_size_B = (uint64_t)(reg_size_MB*pow(2,20));
+
     switch (atoi(argv[2])) {
     case 0:
-        if (one_sided_test()) {
+        
+        printf("Running one-sided test with buffer size %4f MB and %lu B\n",reg_size_MB, reg_size_B);
+        if (one_sided_test(reg_size_B)) {
             fprintf(stderr, "FAIL: one_sided_test\n");
             return -1;
         } else
@@ -154,6 +228,14 @@ usage:
             return -1;
         } else
             printf("pass: buffer_size_mismatch_test\n");
+        break;
+    case 2:
+       printf("Running allocation test with buffer size %4f MB and %lu B\n",reg_size_MB, reg_size_B);
+       if(alloc_test(reg_size_B)) {
+            fprintf(stderr, "FAIL: alloc_test\n");
+            return -1;
+        } else 
+            printf("pass: alloc_test\n");
         break;
     default:
         goto usage; /* >:) */

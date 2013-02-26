@@ -78,8 +78,10 @@ struct ib_alloc
 
 /* server functions */
 int ib_server_connect(struct ib_alloc *ib);
+int ib_server_disconnect(struct ib_alloc *ib);
 
 /* client functions */
 int ib_client_connect(struct ib_alloc *ib);
+int ib_client_disconnect(struct ib_alloc *ib);
 
 #endif

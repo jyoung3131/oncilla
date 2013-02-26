@@ -35,7 +35,9 @@ struct ib_params {
 
 int ib_init(void);
 ib_t ib_new(struct ib_params *p);
+int ib_free(ib_t ib);
 int ib_connect(ib_t ib, bool is_server);
+int ib_disconnect(ib_t ib, bool is_server);
 int ib_read(ib_t ib, size_t offset, size_t len);
 int ib_write(ib_t ib, size_t offset, size_t len);
 int ib_poll(ib_t ib);

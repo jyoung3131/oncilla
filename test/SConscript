@@ -16,6 +16,9 @@ cpath = [os.getcwd() + '/../inc']
 libpath = [os.getcwd() + '/../lib']
 libs = ['ocm', 'rt']
 
+if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
+      ccflags.extend(['-DTIMING'])
+
 if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
     gcc = gccfilter + gcc
 
