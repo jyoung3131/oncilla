@@ -104,7 +104,8 @@ alloc_add_node(int rank, struct alloc_node_config *c)
 int
 alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 {
-    struct node *node = NULL;
+    struct node *node;
+    node = NULL;
 
     if (!req || !alloc) return -1;
 
@@ -117,7 +118,8 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 
     if (req->type == ALLOC_MEM_HOST)
         alloc->remote_rank = req->orig_rank;
-    
+
+    #ifdef INFINIBAND
     else if (req->type == ALLOC_MEM_RDMA) {
         alloc->remote_rank = (req->orig_rank + 1) % num_nodes; /* XXX */
         BUG(!(node = __find_node(alloc->remote_rank)));
@@ -126,10 +128,13 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
         printd("alloc: rdma on %s rank %d\n",
                 alloc->u.rdma.ib_ip, alloc->remote_rank);
     }
+    #endif
     
+    #ifdef EXTOLL
     else if (req->type == ALLOC_MEM_RMA) {
         BUG(1); /* TODO */
     }
+    #endif
 
     else BUG(1);
 
@@ -153,12 +158,14 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 int
 alloc_ate(struct alloc_ation *alloc)
 {
-    /* XXX Save this value somewhere. Maybe create unique alloc IDs to associate
-     * with this. */
-    ib_t ib;
 
     if (!alloc)
         return -1;
+
+    #ifdef INFINIBAND
+    /* XXX Save this value somewhere. Maybe create unique alloc IDs to associate
+     * with this. */
+    ib_t ib;
 
     if (alloc->type == ALLOC_MEM_RDMA) {
         struct ib_params p;
@@ -173,10 +180,13 @@ alloc_ate(struct alloc_ation *alloc)
         if (ib_connect(ib, true))
             ABORT();
     }
+    #endif
 
+    #ifdef EXTOLL
     else if (alloc->type == ALLOC_MEM_RMA) {
         BUG(1);
     }
+    #endif
 
     else {
         BUG(1);

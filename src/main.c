@@ -155,8 +155,10 @@ notify_rank0(void)
     memset(&msg.u.node.config, 0, sizeof(msg.u.node.config)); /* TODO */
     if (gethostname(msg.u.node.config.hostname, HOST_NAME_MAX))
         return -1;
+    #ifdef INFINIBAND
     if (ib_nic_ip(0, msg.u.node.config.ib_ip, HOST_NAME_MAX))
         return -1;
+    #endif
     if (mem_add_msg(&msg))
         return -1;
     return 0;

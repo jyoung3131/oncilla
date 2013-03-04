@@ -16,9 +16,12 @@ import sys
 
 # C configuration environment
 
-mpi_path = '/usr/lib64/openmpi'
+mpi_path = os.getenv('MPI_PATH')
+print mpi_path
+#mpi_path = '/usr/lib64/openmpi'
 mpi_libpath = mpi_path + 'lib/'
-mpi_include = '/usr/include/openmpi-x86_64'
+#mpi_include = '/usr/include/openmpi-x86_64'
+mpi_include = mpi_path + 'include'
 mpi_libs = ['mpi']
 
 ib_libs = ['rdmacm', 'ibverbs']

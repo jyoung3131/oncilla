@@ -8,13 +8,18 @@ import sys
 
 gcc = 'gcc'
 
+mpi_path = os.getenv('MPI_PATH')
+mpi_libpath = mpi_path + '/lib'
+
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
 
-cpath = [os.getcwd() + '/../inc']
+cpath = ['../inc']
+libpath = ['../lib']
+libpath.extend([mpi_libpath])
 
-libpath = [os.getcwd() + '/../lib']
-libs = ['ocm', 'rt']
+libs = ['ocm', 'rt','mpi']
+
 
 if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
       ccflags.extend(['-DTIMING'])
@@ -43,7 +48,7 @@ env.Append(LIBPATH = libpath, LIBS = libs)
 files = os.listdir('.')
 for f in files:
     (name,ext) = os.path.splitext(f)
-    if 'rdma' in name and compilepath == 'extoll':
+    if 'ib' in name and compilepath == 'extoll':
         continue
     elif 'extoll' in name and compilepath == 'ib':
         continue
