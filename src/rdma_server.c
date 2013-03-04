@@ -33,6 +33,10 @@
 
 /* Public functions */
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 int
 ib_server_connect(struct ib_alloc *ib)
 {
@@ -46,15 +50,25 @@ ib_server_connect(struct ib_alloc *ib)
     if (rdma_create_id(ib->rdma.ch, &ib->rdma.listen_id, NULL, RDMA_PS_TCP))
         return -1;
 
+    printf("Port number in server_connect is %d\n", ib->params.port);
+
     addr.sin_family      = AF_INET;
     addr.sin_port        = htons(ib->params.port);
+    //addr.sin_port        = 12345;
+    //inet_aton("10.0.0.2", (struct in_addr *)&addr.sin_addr.s_addr);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     /* Bind to local port and listen for
      * connection request */
+    printf("addr.sin_port = %d\n", addr.sin_port);
 
     if (rdma_bind_addr(ib->rdma.listen_id, (struct sockaddr *) &addr))
+    {
+        printf("addr.sin_port = %d\n", addr.sin_port);
+        printf("IP address is %s\n",inet_ntoa(addr.sin_addr));    
+        printf("rdma_bind_addr failed with errno %d\n", errno);
         return -1;
+    }
 
     if (rdma_listen(ib->rdma.listen_id, 1))
         return -1;

@@ -18,17 +18,10 @@ static ib_t setup(struct ib_params *p)
 	if (!(ib = ib_new(p)))
 		return (ib_t)NULL;
 
-  uint64_t ib_setup_ns = 0;
-  TIMER_DECLARE1(ib_connect_timer);
-  TIMER_START(ib_connect_timer);
-
-	if (ib_connect(ib, true/*is server*/))
-		return (ib_t)NULL;
-
-  TIMER_END(ib_connect_timer, ib_setup_ns);
-  printf("[CONNECT] Time for ib_connect (server): %lu ns\n", ib_setup_ns);
-  //Destroy the timer once we are done with it
-  //TIMER_DESTROY(ib_connect_timer);
+  //We don't time this function because it has several blocking
+  //statements within which provide a false picture of timing.
+  if (ib_connect(ib, true/*is server*/))
+	return (ib_t)NULL;
 
 	return ib;
 }
@@ -64,16 +57,16 @@ static int alloc_test(long long unsigned int size_B)
 	ib_t ib;
 	struct ib_params params;
 	unsigned int *buf = NULL;
-	//size_t count = size; // (1 << 10);
-	size_t len = size_B / sizeof(*buf);
+	unsigned long long num_bufs_to_alloc = size_B / sizeof(*buf);
+	printf("Size of buf is %lu B so we allocatate %llu buffers for a total of %llu B\n", sizeof(*buf), num_bufs_to_alloc, size_B);
 
-	if (!(buf = calloc(size_B, sizeof(*buf))))
+	if (!(buf = calloc(num_bufs_to_alloc, sizeof(*buf))))
 		return -1;
-
+	
 	params.addr     = NULL;
 	params.port     = 12345;
 	params.buf      = buf;
-	params.buf_len  = len;
+	params.buf_len  = num_bufs_to_alloc;
 
 	if (!(ib = setup(&params)))
 		return -1;
@@ -194,6 +187,12 @@ usage:
 	double reg_size_MB = strtod(argv[2], 0);
 	uint64_t reg_size_B = (uint64_t)(reg_size_MB*pow(2,20));
 
+  if(reg_size_MB > 8000.0)
+  {
+    printf("Please pass a data size of less than 8000 MB\n");
+    return -1;
+  }
+
 	switch (atoi(argv[1])) {
 		case 0:
 			if (one_sided_test()) {
@@ -220,6 +219,5 @@ usage:
     default:
       goto usage;
 	}
-
   return 0;
 }

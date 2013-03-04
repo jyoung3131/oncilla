@@ -57,6 +57,7 @@ ib_client_connect(struct ib_alloc *ib)
     if (rdma_create_id(ib->rdma.ch, &ib->rdma.id, NULL, RDMA_PS_TCP))
         return -1;
 
+    printf("Port number in client_connect is %d\n", ib->params.port);
     if (0 > asprintf(&service, "%d", ib->params.port))
         return -1;
 
@@ -168,7 +169,7 @@ ib_client_connect(struct ib_alloc *ib)
     if (rdma_connect(ib->rdma.id, &ib->rdma.param))
         return -1;
 
-if (rdma_get_cm_event(ib->rdma.ch, &ib->rdma.evt))
+    if (rdma_get_cm_event(ib->rdma.ch, &ib->rdma.evt))
         return -1;
 
     if (ib->rdma.evt->event != RDMA_CM_EVENT_ESTABLISHED)

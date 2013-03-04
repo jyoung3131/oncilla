@@ -8,7 +8,7 @@ import sys
 
 gcc = 'gcc'
 
-ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline', '-ggdb']
+ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
 
 cpath = [os.getcwd() + '/../inc']
@@ -23,7 +23,19 @@ if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilatio
     gcc = gccfilter + gcc
 
 if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
-    ccflags.append('-ggdb')
+    ccflags.append(['-ggdb', '-O0'])
+else:
+    ccflags.extend(['-O3'])
+
+if int(ARGUMENTS.get('ib', 0)): # specify IB or EXTOLL compilation path
+    compilepath = 'ib'
+    ccflags.extend(['-DINFINIBAND'])
+elif int(ARGUMENTS.get('extoll', 0)):
+    compilepath = 'extoll'
+    ccflags.extend(['-DEXTOLL'])
+else:
+    compilepath = 'all'
+    ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
 
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBS = libs)
@@ -31,5 +43,9 @@ env.Append(LIBPATH = libpath, LIBS = libs)
 files = os.listdir('.')
 for f in files:
     (name,ext) = os.path.splitext(f)
-    if '.c' == ext.lower():
+    if 'rdma' in name and compilepath == 'extoll':
+        continue
+    elif 'extoll' in name and compilepath == 'ib':
+        continue
+    elif '.c' == ext.lower():
         bin = env.Program(name, [f])

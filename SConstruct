@@ -28,15 +28,30 @@ gccfilter = './gccfilter -c '
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
+#src/rdma.c:107 throws an aliasing error when compiled in the optimized case
+#At some point we need to check on this...
+#ccflags.extend(['-fno-strict-aliasing'])
 
 if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
-    ccflags.extend(['-DTIMING'])
-
-if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
-    gcc = gccfilter + gcc
+   ccflags.extend(['-DTIMING'])
 
 if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
-    ccflags.extend(['-ggdb', '-O0'])
+   ccflags.extend(['-ggdb','-O0'])
+else:
+   ccflags.extend(['-O3','-fno-strict-aliasing'])
+
+if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
+   gcc = gccfilter + gcc
+
+if int(ARGUMENTS.get('ib', 0)): # specify IB or EXTOLL compilation path
+   compilepath = 'ib'
+   ccflags.extend(['-DINFINIBAND'])
+elif int(ARGUMENTS.get('extoll', 0)):
+   compilepath = 'extoll'
+   ccflags.extend(['-DEXTOLL'])
+else:
+   compilepath = 'all'
+   ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
 
 cpath = [os.getcwd() + '/inc', mpi_include]
 
@@ -56,7 +71,13 @@ for f in files:
         continue
     if 'lib' in name:
         continue
-    if '.c' == ext.lower():
+    #Check so we don't compile extoll code on systems
+    #with only IB drivers or vice versa
+    if 'rdma' in name and compilepath == 'extoll':
+        continue
+    elif 'extoll' in name and compilepath == 'ib':
+        continue
+    elif '.c' == ext.lower():
         sources.append('src/' + f)
 
 # Specify binaries
