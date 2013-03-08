@@ -15,10 +15,14 @@
 
 /* Project includes */
 #include <util/list.h>
-#include <io/rdma.h>
-#ifndef INFINIBAND
+#ifdef INFINIBAND
+  #include <io/rdma.h>
+#endif
+
+#ifdef EXTOLL
   #include <io/extoll.h>
 #endif
+
 
 /* Defines */
 

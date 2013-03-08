@@ -68,13 +68,13 @@ else:
 
 #Add IB libs if IB network is supported
 if compilepath == 'extoll':
-  ib_libs = ['']
+  ib_libs = []
 else:
   ib_libs = ['rdmacm', 'ibverbs']
 #Add RMA libs if EXTOLL network is supported
 #librma2 is located at /extoll2/lib/librma2.so
 if compilepath == 'ib':
-  extoll_libs = ['']
+  extoll_libs = []
 else:
   extoll_libs = ['librma2']
   libpath.extend(['/extoll2/lib'])
@@ -112,7 +112,8 @@ if compilepath != 'extoll':
   libfiles.append('src/rdma.c')
   libfiles.append('src/rdma_server.c')
   libfiles.append('src/rdma_client.c')
-elif compilepath != 'ib':
+
+if compilepath != 'ib':
   libfiles.append('src/extoll.c')
   libfiles.append('src/extoll_server.c')
   libfiles.append('src/extoll_client.c')

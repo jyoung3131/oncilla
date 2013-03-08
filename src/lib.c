@@ -32,6 +32,7 @@ struct lib_alloc {
      * to accomodate the heterogeneity in allocations.
      */
     union {
+        #ifdef INFINIBAND
         struct {
             ib_t ib;
             int remote_rank;
@@ -39,9 +40,12 @@ struct lib_alloc {
             size_t local_bytes;
             void *local_ptr;
         } rdma;
+        #endif
+        #ifdef EXTOLL
         struct {
             /* TODO */
         } rma;
+        #endif
         struct {
             size_t bytes;
             void *ptr;
@@ -93,10 +97,12 @@ ocm_init(void)
         return -1;
     }
 
+    #ifdef INFINIBAND
     if (ib_init()) {
         printd("ib failed to initialize\n");
         return -1;
     }
+    #endif
 
     /* tell daemon who we are, wait for confirmation msg */
     memset(&msg, 0, sizeof(msg));
