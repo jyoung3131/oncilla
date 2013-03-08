@@ -9,14 +9,14 @@ import sys
 gcc = 'gcc'
 
 mpi_path = os.getenv('MPI_PATH')
-mpi_libpath = mpi_path + '/lib'
+libpath = [str(mpi_path) + '/lib']
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
 
-cpath = ['../inc']
-libpath = ['../lib']
-libpath.extend([mpi_libpath])
+#cpath = ['../inc']
+cpath = [os.getcwd() + '/../inc']
+libpath.extend(['../lib'])
 
 libs = ['ocm', 'rt','mpi']
 
@@ -41,6 +41,14 @@ elif int(ARGUMENTS.get('extoll', 0)):
 else:
     compilepath = 'all'
     ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
+
+#Add RMA libs if EXTOLL network is supported
+#librma2 is located at /extoll2/lib/librma2.so
+if compilepath == 'ib':
+  extoll_libs = ['']
+else:
+  libs.extend(['librma2'])
+  libpath.extend(['/extoll2/lib'])
 
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBS = libs)

@@ -175,6 +175,18 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+   //To debug Oncilla using GDB pass the flag "mpidbg=1" to the SConstruct when building
+   #ifdef MPI_DEBUG
+   //Code used to attach gdb debugger at the beginning of the main function
+   int mpidbg = 0;
+   char hostname[256];
+   gethostname(hostname, sizeof(hostname));
+   printf("PID %d on %s ready for attach\n", getpid(), hostname);
+   fflush(stdout);
+   while (0 == mpidbg)
+        sleep(5);
+   #endif
+
     /* mem will append msgs to apps into this queue */
     mem_set_outbox(&outbox);
 

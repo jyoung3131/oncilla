@@ -5,49 +5,50 @@
 #include <debug.h>
 #include <time.h>
 
-#include <io/rdma.h>
-#include "../src/rdma.h"
+#include <io/extoll.h>
+#include "../src/extoll.h"
 #include <util/timer.h>
 #include <math.h>
 
-static char *serverIP = NULL;
+static unsigned int server_node_id;
+static unsigned int server_vpid;
+static unsigned long long server_nla;
 
-static ib_t setup(struct ib_params *p)
+static extoll_t setup(struct extoll_params *p)
 {
-    ib_t ib;
+    extoll_t ex;
 
-    if (ib_init())
-        return (ib_t)NULL;
+    if (extoll_init())
+        return (extoll_t)NULL;
 
-    if (!(ib = ib_new(p)))
-        return (ib_t)NULL;
+    if (!(ex = extoll_new(p)))
+        return (extoll_t)NULL;
 
-    //Don't time here due to blocking statements
-    if (ib_connect(ib, false/*is client*/))
-        return (ib_t)NULL;
+    if (extoll_connect(ex, false/*is client*/))
+        return (extoll_t)NULL;
 
-    return ib;
+    return ex;
 }
 
 //Return 0 on success and 1 on failure
-static int teardown(ib_t ib)
+static int teardown(extoll_t ex)
 {
     int ret = 0;
 
-    TIMER_DECLARE1(ib_disconnect_timer);
-    TIMER_START(ib_disconnect_timer);
+    TIMER_DECLARE1(ex_disconnect_timer);
+    TIMER_START(ex_disconnect_timer);
 
-    if (ib_disconnect(ib, false/*is client*/))
+    if (extoll_disconnect(ex, false/*is client*/))
       ret = 1;
 
     #ifdef TIMING
-    uint64_t ib_teardown_ns = 0;
-    TIMER_END(ib_disconnect_timer, ib_teardown_ns);
-    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
+    uint64_t extoll_teardown_ns = 0;
+    TIMER_END(ex_disconnect_timer, extoll_teardown_ns);
+    printf("[DISCONNECT] Time for extoll_disconnect: %lu ns\n", extoll_teardown_ns);
     #endif
    
     //Free the IB structure
-    if(ib_free(ib))
+    if(extoll_free(ex))
       ret = -1;
 
     return ret;
@@ -56,26 +57,25 @@ static int teardown(ib_t ib)
 /* Does simple allocation test - for testing setup times*/
 static int alloc_test(long long unsigned int size_B)
 {
-    ib_t ib;
-    struct ib_params params;
-    unsigned int *buf = NULL;
-    //size_t count = size; // (1 << 10);
-    unsigned long long num_bufs_to_alloc = size_B / sizeof(*buf);
-    printf("Size of buf is %lu B so we allocate %llu buffers for a total of %llu B\n", sizeof(*buf), num_bufs_to_alloc, size_B);
+    extoll_t ex;
+    struct extoll_params params;
+    
+    printf("Allocating %llu bytes \n", size_B);
 
+    //The extoll_client_connect function currently allocates memory 
+    //if (!(buf = calloc(num_bufs_to_alloc, sizeof(*buf))))
+    //    return -1;
 
-    if (!(buf = calloc(num_bufs_to_alloc, sizeof(*buf))))
+    printf("Remote server connection - node: %d, vpid: %d, NLA %llx\n",server_node_id, server_vpid,server_nla);
+    params.dest_node = server_node_id;
+    params.dest_vpid = server_vpid;
+    params.dest_nla = server_nla;
+    params.buf_len  = size_B;
+
+    if (!(ex = setup(&params)))
         return -1;
 
-    params.addr     = serverIP;
-    params.port     = 12345;
-    params.buf      = buf;
-    params.buf_len  = num_bufs_to_alloc;
-
-    if (!(ib = setup(&params)))
-        return -1;
-
-    if(teardown(ib) != 0)
+    if(teardown(ex) != 0)
           return -1;
     
     /*Return 0 on succes*/
@@ -86,7 +86,7 @@ static int alloc_test(long long unsigned int size_B)
 /* Does a simple write/read to/from remote memory. */
 static int one_sided_test(long long unsigned int size_B)
 {
-    ib_t ib;
+    /*extoll_t ib;
     struct ib_params params;
     unsigned int *buf = NULL;
     size_t count = size_B; // (1 << 10);
@@ -107,13 +107,13 @@ static int one_sided_test(long long unsigned int size_B)
     for (i = 0; i < count; i++)
         buf[i] = 0xdeadbeef;
 
-    /* send and wait for completion */
+    // send and wait for completion 
     if (ib_write(ib, 0, len) || ib_poll(ib))
         return -1;
 
     memset(buf, 0, len);
 
-    /* read back and wait for completion */
+    // read back and wait for completion
     if (ib_read(ib, 0, len) || ib_poll(ib))
         return -1;
 
@@ -124,7 +124,7 @@ static int one_sided_test(long long unsigned int size_B)
     //Perform teardown
     if(teardown(ib) != 0)
       return -1;
-
+*/
 
 
     return 0; /* test passed */
@@ -136,7 +136,7 @@ static int one_sided_test(long long unsigned int size_B)
  */
 static int buffer_size_mismatch_test(void)
 {
-    ib_t ib;
+    /*extoll_t ex;
     struct ib_params params;
     struct {
         char str[32];
@@ -156,9 +156,9 @@ static int buffer_size_mismatch_test(void)
     if (!(ib = setup(&params)))
         return -1;
 
-    /* send 'hello' to second index (third string) */
-    /* wait for 'nice to meet you' in seventh (last) index */
-    /* write back, releasing server */
+    // send 'hello' to second index (third string) 
+    // wait for 'nice to meet you' in seventh (last) index 
+    // write back, releasing server 
 
     strncpy(buf->str, "hello", strlen("hello") + 1);
     if (ib_write(ib, (2 * len), len) || ib_poll(ib))
@@ -180,7 +180,7 @@ static int buffer_size_mismatch_test(void)
     //Perform teardown
     if(teardown(ib) != 0)
       return -1;
-
+*/
     return 0;
 }
 
@@ -192,17 +192,19 @@ static int buffer_size_mismatch_test(void)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 4) {
+    if (argc != 6) {
 usage:
-        fprintf(stderr, "Usage: %s <server_ip=10.0.0.[1=ifrit or 2=shiva]> <test_num> <alloc_size_MB>\n"
+        fprintf(stderr, "Usage: %s <test_num> <server_node_id> <server_dest_vpid> <server_nla> <alloc_size_MB>\n"
                 "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc\n"
                 "\talloc_size: can be specified in any positive decimal format\n", argv[0]);
         return -1;
     }
-    serverIP = argv[1];
+    server_node_id = strtol(argv[2],0,0);
+    server_vpid = strtol(argv[3],0,0);
+    server_nla = strtol(argv[4],0,0);
 
     //Convert the double value for MB input to bytes
-    double reg_size_MB = strtod(argv[3], 0);
+    double reg_size_MB = strtod(argv[5], 0);
     uint64_t reg_size_B = (uint64_t)(reg_size_MB*pow(2,20));
 
     if(reg_size_MB > 8000.0)
@@ -211,7 +213,7 @@ usage:
       return -1;
     }
 
-    switch (atoi(argv[2])) {
+    switch (atoi(argv[1])) {
     case 0:
         
         printf("Running one-sided test with buffer size %4f MB and %lu B\n",reg_size_MB, reg_size_B);

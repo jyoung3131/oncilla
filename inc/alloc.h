@@ -16,6 +16,7 @@
 /* Project includes */
 #include <util/list.h>
 #include <io/rdma.h>
+#include <io/extoll.h>
 
 /* Defines */
 
