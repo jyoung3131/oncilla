@@ -16,7 +16,9 @@
 /* Project includes */
 #include <util/list.h>
 #include <io/rdma.h>
-#include <io/extoll.h>
+#ifndef INFINIBAND
+  #include <io/extoll.h>
+#endif
 
 /* Defines */
 

@@ -27,7 +27,7 @@ Help("""
 mpi_path = os.getenv('MPI_PATH')
 mpi_include = str(mpi_path) + 'include'
 libpath = [str(mpi_path) + 'lib']
-libs = ['mpi']
+libs = ['mpi', 'rt']
 cpath = [os.getcwd() + '/inc', mpi_include]
 
 gcc = str(mpi_path) + '/bin/mpicc'
@@ -82,9 +82,6 @@ else:
 #Add IB and EXTOLL libs (if defined)
 libs.extend([ib_libs,extoll_libs])
 
-#libpath = [mpi_libpath]dd
-#libs = [mpi_libs, ib_libs, extoll_libs, 'rt']
-
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBFLAGS = libflags, LIBS = libs)
 
@@ -110,10 +107,14 @@ for f in files:
 # Specify binaries
 
 binary = env.Program('bin/oncillamem', ['src/main.c', sources])
-libfiles = ['src/lib.c', 'src/pmsg.c', 'src/queue.c', 'src/rdma.c', 'src/extoll.c']
-libfiles.append('src/rdma_server.c')
-libfiles.append('src/rdma_client.c')
-libfiles.append('src/extoll_server.c')
-libfiles.append('src/extoll_client.c')
+libfiles = ['src/lib.c', 'src/pmsg.c', 'src/queue.c']
+if compilepath != 'extoll':
+  libfiles.append('src/rdma.c')
+  libfiles.append('src/rdma_server.c')
+  libfiles.append('src/rdma_client.c')
+elif compilepath != 'ib':
+  libfiles.append('src/extoll.c')
+  libfiles.append('src/extoll_server.c')
+  libfiles.append('src/extoll_client.c')
 solib = env.SharedLibrary('lib/libocm.so', libfiles)
 SConscript(['test/SConscript'])
