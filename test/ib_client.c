@@ -83,6 +83,101 @@ static int alloc_test(long long unsigned int size_B)
 
 }
 
+/* write/read to/from remote memory timing test. */
+static int read_write_test(long long unsigned int size_B)
+{
+    TIMER_DECLARE1(ib_read_timer);
+    TIMER_DECLARE1(ib_write_timer);
+    #ifdef TIMING
+    uint64_t ib_write_time_ns = 0;
+    uint64_t ib_read_time_ns = 0;
+    #endif
+    
+
+    ib_t ib;
+    struct ib_params params;
+    char *buf = NULL;
+
+    size_t count = pow(2,32)+1;
+    size_t len= count*sizeof(*buf);
+    long long unsigned int size_B2= size_B;
+
+    if (!(buf = calloc(count, sizeof(*buf)))){
+	    printf("memory allocation failed\n");
+            return -1;
+    }
+    printf("size of count: %lu\n", count);
+    printf("size of *buf : %lu\n", sizeof(*buf));
+
+    params.addr     = serverIP;
+    params.port     = 12345;
+    params.buf      = buf;
+    params.buf_len  = len;
+    printf("setting up\n");
+    if (!(ib = setup(&params))){
+        printf("setup failed\n");
+	    return -1;
+    }
+    printf("setting done\n");
+    
+    
+     while(size_B<=pow(2,31)){
+	len=size_B;
+	#ifdef TIMING
+	printf("------- %llu bytes -------\n", size_B);
+	#endif
+ 
+	#ifdef TIMING
+	TIMER_START(ib_write_timer);
+	if(ib_write(ib, 0, len)||ib_poll(ib))
+	{
+	    printf("write failed\n");
+	    return -1;
+	}
+	TIMER_END(ib_write_timer, ib_write_time_ns);
+	TIMER_CLEAR(ib_write_timer);
+	printf("[W] time to write %llu bytes: %lu \n", size_B, ib_write_time_ns);     
+	#endif 
+	memset(buf, 0, len);
+    	size_B*=2;
+	}
+	/* read back and wait for completion */
+      while(size_B2<=pow(2,31)){
+    	#ifdef TIMING
+	printf("------- %llu bytes -------\n", size_B2);
+	#endif
+	len=size_B2;
+	#ifdef TIMING
+	TIMER_START(ib_read_timer);
+	if(ib_read(ib, 0, len)||ib_poll(ib))
+	{
+	    printf("read failed\n");
+	    return -1;
+	}
+	TIMER_END(ib_read_timer, ib_read_time_ns);
+	TIMER_CLEAR(ib_read_timer);
+	printf("[R] time to read %lu bytes: %lu \n", len, ib_read_time_ns);
+	#endif
+	/*
+	for (i = 0; i < count; i++)
+	    if (buf[i] != 0xdeadbeef){
+	    printf("buf error i is %lu\n",i);
+		return -1;
+	    }
+	*/
+	size_B2*=2;
+	}
+	//Perform teardown
+	if(teardown(ib) != 0){
+	  printf("tear down error\n");
+	  return -1;
+	}
+	//double the buffer size
+    
+
+    return 0; /* test passed */
+}
+
 /* Does a simple write/read to/from remote memory. */
 static int one_sided_test(long long unsigned int size_B)
 {
@@ -90,7 +185,7 @@ static int one_sided_test(long long unsigned int size_B)
     struct ib_params params;
     unsigned int *buf = NULL;
     size_t count = size_B; // (1 << 10);
-    size_t len = count * sizeof(*buf);
+    size_t len = count;// * sizeof(*buf);
     size_t i;
 
     if (!(buf = calloc(count, sizeof(*buf))))
@@ -195,7 +290,7 @@ int main(int argc, char *argv[])
     if (argc != 4) {
 usage:
         fprintf(stderr, "Usage: %s <server_ip=10.0.0.[1=ifrit or 2=shiva]> <test_num> <alloc_size_MB>\n"
-                "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc\n"
+                "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write \n"
                 "\talloc_size: can be specified in any positive decimal format\n", argv[0]);
         return -1;
     }
@@ -236,6 +331,14 @@ usage:
         } else 
             printf("pass: alloc_test\n");
         break;
+    case 3:
+	printf("Running read/write test with buffer size beginning with %4f MB and %lu B\n", reg_size_MB, reg_size_B);
+	if(read_write_test(reg_size_B)){
+	    fprintf(stderr, "FAIL: read/write test\n");
+	    return -1;
+	} else
+	    printf("pass: read/write test\n");
+	break;
     default:
         goto usage; /* >:) */
     }

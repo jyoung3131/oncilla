@@ -79,13 +79,43 @@ static int alloc_test(long long unsigned int size_B)
 
 }
 
+/* read / write to/from memory timing test */
+static int read_write_test(void){
 
+	ib_t ib;
+	struct ib_params params;
+	char *buf = NULL;
+	size_t count = pow(2,32)+1;
+	size_t len = count * sizeof(*buf);
+
+	if (!(buf = calloc(count, sizeof(*buf))))
+		return -1;
+
+	params.addr     = NULL;
+	params.port     = 12345;
+	params.buf      = buf;
+	params.buf_len  = len;
+	
+	if (!(ib = setup(&params))){
+		printf("setup failed\n");
+		return -1;
+	}
+	while((getchar()!=EOF)){
+
+	}
+	
+
+	  if(teardown(ib) != 0)
+	  return -1;
+	
+	return 0;
+}
 static int one_sided_test(void)
 {
 	ib_t ib;
 	struct ib_params params;
 	unsigned int *buf = NULL;
-	size_t count = (1 << 10);
+	size_t count = 1000000000;
 	size_t len = count * sizeof(*buf);
 
 	if (!(buf = calloc(count, sizeof(*buf))))
@@ -215,6 +245,14 @@ usage:
 				return -1;
 			} else
 				printf("pass: alloc_test\n");
+			break;
+		case 3:
+			printf("Running read/write test with starting buffer size %4f MB and %lu B\n", reg_size_MB, reg_size_B);
+			if(read_write_test()){
+			    fprintf(stderr, "FAIL: read/write test\n");
+			    return -1;
+			} else
+			    printf("PASS: read/write test\n");		
 			break;
     default:
       goto usage;

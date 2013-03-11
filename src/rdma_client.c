@@ -39,6 +39,20 @@
 int
 ib_client_connect(struct ib_alloc *ib)
 {
+    #ifdef TIMING
+    uint64_t ib_mem_reg_ns = 0;
+    uint64_t ib_create_qp_ns = 0;
+    uint64_t ib_total_conn_ns = 0;
+    uint64_t ib_total_conn_ns_sum =0;
+    //timer for total connection
+    TIMER_DECLARE1(ib_total_client_conn_timer);
+ 
+    TIMER_DECLARE1(ib_client_timer);
+    
+    //start timer for client total connection time
+    TIMER_START(ib_total_client_conn_timer);
+    #endif
+     
     int err = 0, n;
     struct addrinfo *res, *t, hints;
     char *service;
@@ -73,10 +87,22 @@ ib_client_connect(struct ib_alloc *ib)
             break;
     if (err)
         return -1;
+    
+    #ifdef TIMING
+    //stop timer to ignore wait blocks
+    TIMER_END(ib_total_client_conn_timer, ib_total_conn_ns);
+    ib_total_conn_ns_sum+= ib_total_conn_ns;
+    #endif
 
     /* pull and ack event */
     if (rdma_get_cm_event(ib->rdma.ch, &(ib->rdma.evt)))
         return -1;
+    
+    #ifdef TIMING
+    //resume total connection timer
+    TIMER_START(ib_total_client_conn_timer);
+    #endif
+
     if (ib->rdma.evt->event != RDMA_CM_EVENT_ADDR_RESOLVED)
         return -1;
     rdma_ack_cm_event(ib->rdma.evt);
@@ -85,9 +111,20 @@ ib_client_connect(struct ib_alloc *ib)
     if (rdma_resolve_route(ib->rdma.id, RESOLVE_TIMEOUT_MS))
         return -1;
 
+    #ifdef TIMING
+    //stop timer to ignore wait blocks
+    TIMER_END(ib_total_client_conn_timer, ib_total_conn_ns);
+    ib_total_conn_ns_sum+= ib_total_conn_ns;
+    #endif
     /* pull and ack event */
     if (rdma_get_cm_event(ib->rdma.ch, &(ib->rdma.evt)))
         return -1;
+
+    #ifdef TIMING
+    //resume total connection timer
+    TIMER_START(ib_total_client_conn_timer);
+    #endif
+
     if (ib->rdma.evt->event != RDMA_CM_EVENT_ROUTE_RESOLVED)
         return -1;
     rdma_ack_cm_event(ib->rdma.evt);
@@ -112,11 +149,7 @@ ib_client_connect(struct ib_alloc *ib)
          IBV_ACCESS_REMOTE_READ |
          IBV_ACCESS_REMOTE_WRITE);
   
-  #ifdef TIMING
-    uint64_t ib_mem_reg_ns = 0;
-  #endif
-  TIMER_DECLARE1(ib_client_timer);
-  TIMER_START(ib_client_timer);
+    TIMER_START(ib_client_timer);
 
     if (!(ib->verbs.mr = ibv_reg_mr(ib->verbs.pd, ib->params.buf,
                     ib->params.buf_len, mr_flags))) {
@@ -125,11 +158,8 @@ ib_client_connect(struct ib_alloc *ib)
     }
   
     TIMER_END(ib_client_timer, ib_mem_reg_ns);
-  #ifdef TIMING
-    printf("[CONNECT] Time for ibv_reg_mr: %lu ns \n", ib_mem_reg_ns);
-  #endif
-  //Reset the timer so it can be reused
-  TIMER_CLEAR(ib_client_timer);
+   //Reset the timer so it can be reused
+    TIMER_CLEAR(ib_client_timer);
 
     printd("registered memory region (%lu bytes)\n",
             ib->verbs.mr->length);
@@ -145,20 +175,14 @@ ib_client_connect(struct ib_alloc *ib)
     ib->verbs.qp_attr.qp_type   = IBV_QPT_RC;
  
 
-  #ifdef TIMING
-    uint64_t ib_create_qp_ns = 0;
-  #endif
-  TIMER_START(ib_client_timer);
+
+    TIMER_START(ib_client_timer);
 
     if (rdma_create_qp(ib->rdma.id, ib->verbs.pd, &ib->verbs.qp_attr))
         return -1;
   
     TIMER_END(ib_client_timer, ib_create_qp_ns);
-  #ifdef TIMING
-    printf("[CONNECT] Time for rdma_create_qp: %lu ns\n", ib_create_qp_ns);
-  #endif
-
-    /* 3. Connect to server */
+      /* 3. Connect to server */
 
     //ib->rdma.param.responder_resources  = 2;
     ib->rdma.param.initiator_depth      = 2;
@@ -169,8 +193,19 @@ ib_client_connect(struct ib_alloc *ib)
     if (rdma_connect(ib->rdma.id, &ib->rdma.param))
         return -1;
 
+    #ifdef TIMING
+    //stop timer to ignore wait blocks
+    TIMER_END(ib_total_client_conn_timer, ib_total_conn_ns);
+    ib_total_conn_ns_sum+= ib_total_conn_ns;
+    #endif
+
     if (rdma_get_cm_event(ib->rdma.ch, &ib->rdma.evt))
         return -1;
+
+    #ifdef TIMING
+    //resume total connection timer
+    TIMER_START(ib_total_client_conn_timer);
+    #endif
 
     if (ib->rdma.evt->event != RDMA_CM_EVENT_ESTABLISHED)
         return -1;
@@ -185,6 +220,13 @@ ib_client_connect(struct ib_alloc *ib)
 
     rdma_ack_cm_event(ib->rdma.evt);
 
+    //print all timer results here
+    #ifdef TIMING
+    printf("[CONNECT] Time for ibv_reg_mr: %lu ns \n"
+           "[CONNECT] Time for rdma_creqte_qp: %lu ns\n"
+           "[CONNECT] Time for total server connection: %lu ns\n"
+           ,ib_mem_reg_ns, ib_create_qp_ns, ib_total_conn_ns_sum);
+    #endif
     return 0;
 }
 
@@ -213,7 +255,8 @@ ib_client_disconnect(struct ib_alloc *ib)
 
   #ifdef TIMING
   uint64_t ib_total_disconnect_ns = 0;
-  uint64_t ib_fine_disconnect_ns = 0;
+  uint64_t ib_destroy_qp_ns =0;
+  uint64_t ib_mem_dereg_ns = 0;
   #endif
 
   TIMER_DECLARE1(ib_disconnect_timer);
@@ -225,10 +268,7 @@ ib_client_disconnect(struct ib_alloc *ib)
     //Destroy the queue pair - returns void
     rdma_destroy_qp(ib->rdma.id);
   
-  TIMER_END(ib_dis_fine_timer, ib_fine_disconnect_ns);
-  #ifdef TIMING
-    printf("Time for rdma_destroy_qp: %lu ns \n", ib_fine_disconnect_ns);
-  #endif
+  TIMER_END(ib_dis_fine_timer, ib_destroy_qp_ns);
   //Reset the timer so it can be reused
   TIMER_CLEAR(ib_dis_fine_timer);
 
@@ -239,10 +279,7 @@ ib_client_disconnect(struct ib_alloc *ib)
     fprintf(stderr, "failed to deregister MR\n");
     rc = 1;
   }
-  TIMER_END(ib_dis_fine_timer, ib_fine_disconnect_ns);
-  #ifdef TIMING
-    printf("Time for ibv_dereg_mr: %lu ns \n", ib_fine_disconnect_ns);
-  #endif
+  TIMER_END(ib_dis_fine_timer, ib_mem_dereg_ns);
   //Reset the timer so it can be reused
   TIMER_CLEAR(ib_dis_fine_timer);
 
@@ -273,11 +310,16 @@ ib_client_disconnect(struct ib_alloc *ib)
   rdma_destroy_event_channel(ib->rdma.ch);
 
   TIMER_END(ib_disconnect_timer, ib_total_disconnect_ns);
+  
+  //prints all timer results here
   #ifdef TIMING
-    printf("[DISCONNECT] Total time for ib_client_disconnect: %lu ns \n", ib_total_disconnect_ns);
+  printf("[DISCONNECT] Time for ibv_dereg_mr: %lu ns \n"
+           "[DISCONNECT] Time for rdma_destroy_qp: %lu ns \n"
+           "[DISCONNECT] Total time for ib_client_disconnect: %lu ns\n"
+           ,ib_mem_dereg_ns, ib_destroy_qp_ns, ib_total_disconnect_ns);
   #endif
 
-  printf("Successfully destroyed all IB and RDMA CM objects\n");
+  //  printf("Successfully destroyed all IB and RDMA CM objects\n");
 
   return rc;
 
