@@ -8,13 +8,18 @@ import sys
 
 gcc = 'gcc'
 
+mpi_path = os.getenv('MPI_PATH')
+libpath = [str(mpi_path) + '/lib']
+
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
 
+#cpath = ['../inc']
 cpath = [os.getcwd() + '/../inc']
+libpath.extend(['../lib'])
 
-libpath = [os.getcwd() + '/../lib']
-libs = ['ocm', 'rt']
+libs = ['ocm', 'rt','mpi']
+
 
 if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
       ccflags.extend(['-DTIMING'])
@@ -37,13 +42,21 @@ else:
     compilepath = 'all'
     ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
 
+#Add RMA libs if EXTOLL network is supported
+#librma2 is located at /extoll2/lib/librma2.so
+if compilepath == 'ib':
+  extoll_libs = ['']
+else:
+  libs.extend(['librma2'])
+  libpath.extend(['/extoll2/lib'])
+
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBS = libs)
 
 files = os.listdir('.')
 for f in files:
     (name,ext) = os.path.splitext(f)
-    if 'rdma' in name and compilepath == 'extoll':
+    if 'ib' in name and compilepath == 'extoll':
         continue
     elif 'extoll' in name and compilepath == 'ib':
         continue

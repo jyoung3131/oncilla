@@ -61,7 +61,7 @@ static int alloc_test(long long unsigned int size_B)
     unsigned int *buf = NULL;
     //size_t count = size; // (1 << 10);
     unsigned long long num_bufs_to_alloc = size_B / sizeof(*buf);
-    printf("Size of buf is %lu B so we allocatate %llu buffers for a total of %llu B\n", sizeof(*buf), num_bufs_to_alloc, size_B);
+    printf("Size of buf is %lu B so we allocate %llu buffers for a total of %llu B\n", sizeof(*buf), num_bufs_to_alloc, size_B);
 
 
     if (!(buf = calloc(num_bufs_to_alloc, sizeof(*buf))))

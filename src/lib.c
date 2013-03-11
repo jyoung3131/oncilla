@@ -32,6 +32,7 @@ struct lib_alloc {
      * to accomodate the heterogeneity in allocations.
      */
     union {
+        #ifdef INFINIBAND
         struct {
             ib_t ib;
             int remote_rank;
@@ -39,9 +40,12 @@ struct lib_alloc {
             size_t local_bytes;
             void *local_ptr;
         } rdma;
+        #endif
+        #ifdef EXTOLL
         struct {
             /* TODO */
         } rma;
+        #endif
         struct {
             size_t bytes;
             void *ptr;
@@ -50,15 +54,16 @@ struct lib_alloc {
     } u;
 };
 
-#define for_each_alloc(alloc, allocs) \
-    list_for_each_entry(alloc, &allocs, link)
-#define lock_allocs()   pthread_mutex_lock(&allocs_lock)
-#define unlock_allocs() pthread_mutex_unlock(&allocs_lock)
 
 /* Internal state */
 
 static LIST_HEAD(allocs); /* list of lib_alloc */
 static pthread_mutex_t allocs_lock = PTHREAD_MUTEX_INITIALIZER;
+
+#define for_each_alloc(alloc, allocs) \
+    list_for_each_entry(alloc, &allocs, link)
+#define lock_allocs()   pthread_mutex_lock(&allocs_lock)
+#define unlock_allocs() pthread_mutex_unlock(&allocs_lock)
 
 /* Private functions */
 
@@ -92,10 +97,12 @@ ocm_init(void)
         return -1;
     }
 
+    #ifdef INFINIBAND
     if (ib_init()) {
         printd("ib failed to initialize\n");
         return -1;
     }
+    #endif
 
     /* tell daemon who we are, wait for confirmation msg */
     memset(&msg, 0, sizeof(msg));
@@ -192,7 +199,7 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
         lib_alloc->u.local.ptr      = malloc(msg_alloc->bytes);
         ABORT2(!lib_alloc->u.local.ptr);
     }
-
+    #ifdef INFINIBAND
     else if (ALLOC_MEM_RDMA == msg_alloc->type) {
         printd("ALLOC_MEM_RDMA %lu bytes\n", msg_alloc->bytes);
         struct ib_params p;
@@ -231,10 +238,18 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
         free(p.addr);
         p.addr = NULL;
     }
+    #endif 
 
+    #ifdef EXTOLL
     else if (ALLOC_MEM_RMA == msg_alloc->type) {
+        printd("adding new lib_alloc to list\n");
+        lock_allocs();
+        list_add(&lib_alloc->link, &allocs);
+        unlock_allocs();
+
         BUG(1); /* TODO path not implemented... */
     }
+    #endif
 
     else {
         BUG(1); /* protocol error */
@@ -256,12 +271,19 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
     if (a->kind == OCM_LOCAL) {
         *buf = a->u.local.ptr;
         *len = a->u.local.bytes;
-    } else if (a->kind == OCM_REMOTE_RDMA) {
+    }
+    #ifdef INFINIBAND
+    else if (a->kind == OCM_REMOTE_RDMA) {
         *buf = a->u.rdma.local_ptr;
         *len = a->u.rdma.local_bytes;
-    } else if (a->kind == OCM_REMOTE_RMA) {
+    }
+    #endif
+    #ifdef EXTOLL
+    else if (a->kind == OCM_REMOTE_RMA) {
         BUG(1);
-    } else {
+    } 
+    #endif
+    else {
         BUG(1);
     }
     return 0;
@@ -273,11 +295,18 @@ ocm_remote_sz(ocm_alloc_t a, size_t *len)
     if (!a) return -1;
     if (a->kind == OCM_LOCAL) {
         return -1; /* there exists no remote buffer */
-    } else if (a->kind == OCM_REMOTE_RDMA) {
+    }
+    #ifdef INFINIBAND
+    else if (a->kind == OCM_REMOTE_RDMA) {
         *len = a->u.rdma.remote_bytes;
-    } else if (a->kind == OCM_REMOTE_RMA) {
+    } 
+    #endif
+    #ifdef EXTOLL
+    else if (a->kind == OCM_REMOTE_RMA) {
         BUG(1);
-    } else {
+    }
+    #endif
+    else {
         BUG(1);
     }
     return 0;

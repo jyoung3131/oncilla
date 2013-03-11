@@ -14,20 +14,29 @@ import os
 import commands
 import sys
 
+Help("""
+      Type: 'scons ' to build the optimized version,
+            'scons -c' to clean the build directory,
+            'scons dbg=1' to build the debug version,
+            'scons mpidbg=1' to build the MPI debug version (OCM debugging),
+            'scons timing=1' to enable timers for the optimized build,
+            'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively.
+      """)
+
 # C configuration environment
+mpi_path = os.getenv('MPI_PATH')
+mpi_include = str(mpi_path) + 'include'
+libpath = [str(mpi_path) + 'lib']
+libs = ['mpi', 'rt']
+cpath = [os.getcwd() + '/inc', mpi_include]
 
-mpi_path = '/usr/lib64/openmpi'
-mpi_libpath = mpi_path + 'lib/'
-mpi_include = '/usr/include/openmpi-x86_64'
-mpi_libs = ['mpi']
-
-ib_libs = ['rdmacm', 'ibverbs']
-
-gcc = mpi_path + '/bin/mpicc'
+gcc = str(mpi_path) + '/bin/mpicc'
 gccfilter = './gccfilter -c '
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
+libflags = []
+
 #src/rdma.c:107 throws an aliasing error when compiled in the optimized case
 #At some point we need to check on this...
 #ccflags.extend(['-fno-strict-aliasing'])
@@ -35,14 +44,18 @@ ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
 if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
    ccflags.extend(['-DTIMING'])
 
-if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
+if int(ARGUMENTS.get('dbg', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])
+   libflags.extend(['-ggdb','-O0'])
+elif int(ARGUMENTS.get('mpidbg', 0)): # set debug flags and set MPIDEBUG preprocessor flag
+   ccflags.extend(['-ggdb','-O0', '-DMPI_DEBUG'])
+   libflags.extend(['-ggdb','-O0'])
 else:
-   ccflags.extend(['-O3','-fno-strict-aliasing'])
+   ccflags.extend(['-O3'])
+   ccflags.extend(['-fno-strict-aliasing'])
 
-if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
-   gcc = gccfilter + gcc
-
+#Detect whether the user wants to compile with IB, EXTOLL, or all networks
+#available
 if int(ARGUMENTS.get('ib', 0)): # specify IB or EXTOLL compilation path
    compilepath = 'ib'
    ccflags.extend(['-DINFINIBAND'])
@@ -53,13 +66,24 @@ else:
    compilepath = 'all'
    ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
 
-cpath = [os.getcwd() + '/inc', mpi_include]
+#Add IB libs if IB network is supported
+if compilepath == 'extoll':
+  ib_libs = []
+else:
+  ib_libs = ['rdmacm', 'ibverbs']
+#Add RMA libs if EXTOLL network is supported
+#librma2 is located at /extoll2/lib/librma2.so
+if compilepath == 'ib':
+  extoll_libs = []
+else:
+  extoll_libs = ['librma2']
+  libpath.extend(['/extoll2/lib'])
 
-libpath = [mpi_libpath]
-libs = [mpi_libs, ib_libs, 'rt']
+#Add IB and EXTOLL libs (if defined)
+libs.extend([ib_libs,extoll_libs])
 
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
-env.Append(LIBPATH = libpath, LIBS = libs)
+env.Append(LIBPATH = libpath, LIBFLAGS = libflags, LIBS = libs)
 
 # Gather sources
 
@@ -83,8 +107,15 @@ for f in files:
 # Specify binaries
 
 binary = env.Program('bin/oncillamem', ['src/main.c', sources])
-libfiles = ['src/lib.c', 'src/pmsg.c', 'src/queue.c', 'src/rdma.c']
-libfiles.append('src/rdma_server.c')
-libfiles.append('src/rdma_client.c')
+libfiles = ['src/lib.c', 'src/pmsg.c', 'src/queue.c']
+if compilepath != 'extoll':
+  libfiles.append('src/rdma.c')
+  libfiles.append('src/rdma_server.c')
+  libfiles.append('src/rdma_client.c')
+
+if compilepath != 'ib':
+  libfiles.append('src/extoll.c')
+  libfiles.append('src/extoll_server.c')
+  libfiles.append('src/extoll_client.c')
 solib = env.SharedLibrary('lib/libocm.so', libfiles)
 SConscript(['test/SConscript'])

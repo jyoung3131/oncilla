@@ -15,7 +15,14 @@
 
 /* Project includes */
 #include <util/list.h>
-#include <io/rdma.h>
+#ifdef INFINIBAND
+  #include <io/rdma.h>
+#endif
+
+#ifdef EXTOLL
+  #include <io/extoll.h>
+#endif
+
 
 /* Defines */
 
@@ -26,7 +33,7 @@ enum alloc_ation_type
     ALLOC_MEM_INVALID = 0,
 
     ALLOC_MEM_HOST, /* local RAM only */
-    ALLOC_MEM_RMA, /* HTX */
+    ALLOC_MEM_RMA, /* EXTOLL */
     ALLOC_MEM_RDMA, /* infiniband */
     ALLOC_MEM_GPU, /* local or remote GPU */
 
