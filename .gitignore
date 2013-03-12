@@ -4,6 +4,7 @@
 *.swn
 *.so
 *.os
+*.cmd
 cscope.out
 bin/oncillamem
 .sconsign.dblite

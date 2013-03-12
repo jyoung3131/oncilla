@@ -27,7 +27,9 @@ if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-pl
 if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
     gcc = gccfilter + gcc
 
-if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
+if int(ARGUMENTS.get('dbg', 0)): # 
+    ccflags.append(['-ggdb', '-O0'])
+elif int(ARGUMENTS.get('mpidbg', 0)): # 
     ccflags.append(['-ggdb', '-O0'])
 else:
     ccflags.extend(['-O3'])

@@ -86,11 +86,11 @@ static int alloc_test(long long unsigned int size_B)
 /* write/read to/from remote memory timing test. */
 static int read_write_test(long long unsigned int size_B)
 {
-    TIMER_DECLARE1(ib_read_timer);
+    //TIMER_DECLARE1(ib_read_timer);
     TIMER_DECLARE1(ib_write_timer);
     #ifdef TIMING
     uint64_t ib_write_time_ns = 0;
-    uint64_t ib_read_time_ns = 0;
+    //uint64_t ib_read_time_ns = 0;
     #endif
     
 
@@ -100,7 +100,7 @@ static int read_write_test(long long unsigned int size_B)
 
     size_t count = pow(2,32)+1;
     size_t len= count*sizeof(*buf);
-    long long unsigned int size_B2= size_B;
+    //long long unsigned int size_B2= size_B;
 
     if (!(buf = calloc(count, sizeof(*buf)))){
 	    printf("memory allocation failed\n");
@@ -110,7 +110,7 @@ static int read_write_test(long long unsigned int size_B)
     printf("size of *buf : %lu\n", sizeof(*buf));
 
     params.addr     = serverIP;
-    params.port     = 12345;
+    params.port     = 23456;
     params.buf      = buf;
     params.buf_len  = len;
     printf("setting up\n");
@@ -121,8 +121,9 @@ static int read_write_test(long long unsigned int size_B)
     printf("setting done\n");
     
     
-     while(size_B<=pow(2,31)){
-	len=size_B;
+     //while(size_B<=pow(2,31)){
+	//len=size_B;
+  len=(pow(2,31)-1);
 	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B);
 	#endif
@@ -138,10 +139,10 @@ static int read_write_test(long long unsigned int size_B)
 	TIMER_CLEAR(ib_write_timer);
 	printf("[W] time to write %llu bytes: %lu \n", size_B, ib_write_time_ns);     
 	#endif 
-	memset(buf, 0, len);
+	/*memset(buf, 0, len);
     	size_B*=2;
 	}
-	/* read back and wait for completion */
+	// read back and wait for completion
       while(size_B2<=pow(2,31)){
     	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B2);
@@ -158,15 +159,9 @@ static int read_write_test(long long unsigned int size_B)
 	TIMER_CLEAR(ib_read_timer);
 	printf("[R] time to read %lu bytes: %lu \n", len, ib_read_time_ns);
 	#endif
-	/*
-	for (i = 0; i < count; i++)
-	    if (buf[i] != 0xdeadbeef){
-	    printf("buf error i is %lu\n",i);
-		return -1;
-	    }
-	*/
+	
 	size_B2*=2;
-	}
+	}*/
 	//Perform teardown
 	if(teardown(ib) != 0){
 	  printf("tear down error\n");

@@ -91,8 +91,10 @@ static int read_write_test(void){
 	if (!(buf = calloc(count, sizeof(*buf))))
 		return -1;
 
+  printf("Daemon allocating %lu B of memory\n", len);
+
 	params.addr     = NULL;
-	params.port     = 12345;
+	params.port     = 23456;
 	params.buf      = buf;
 	params.buf_len  = len;
 	
