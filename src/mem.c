@@ -17,11 +17,11 @@
 /* Other project includes */
 
 /* Project includes */
-#include <io/nw.h>
-#include <msg.h>
-#include <util/queue.h>
-#include <debug.h>
 #include <alloc.h>
+#include <debug.h>
+#include <msg.h>
+#include <sock.h>
+#include <util/queue.h>
 
 /* Directory includes */
 
@@ -33,40 +33,19 @@
 
 /* TODO need list representing pending alloc requests */
 
-static struct queue msg_q; /* incoming pending messages (from nw) */
 static struct queue *outbox; /* msgs intended for apps  (to pmsg) */
-
-static pthread_t handler_tid;
-/* volatile: gcc optimizes out updates to variable across threads */
-static volatile bool handler_alive = false;
 
 /* Private functions */
 
 static void
-send_rank(struct message *m, int to_rank)
-{
-    printd("sending to rank %d via MPI\n", to_rank);
-    nw_send(m, to_rank);
-}
-
-static void
 send_pid(struct message *m, pid_t to_pid)
 {
-    printd("sending to app %d\n", to_pid);
+    printd("%s %d\n", __func__, to_pid);
     m->pid = to_pid;
     q_push(outbox, m);
 }
 
-/* each mpi rank inserts this message when it starts up */
-static int
-process_add_node(struct message *m)
-{
-    BUG(nw_get_rank() > 0);
-    if (alloc_add_node(m->rank, &m->u.node.config))
-        return -1;
-    return 0;
-}
-
+#if 0
 /* message type MSG_REQ_ALLOC */
 static int
 process_req_alloc(struct message *m)
@@ -165,53 +144,71 @@ process_do_free(struct message *m)
     m->status++;
     return 0;
 }
+#endif
 
-static void
-queue_handler_cleanup(void *arg)
+static void *
+inbound_thread(void *arg)
 {
-    handler_alive = false;
+    struct sockconn *conn = (struct sockconn*)arg;
+    struct message msg;
+    int ret = 0;
+
+    BUG(!conn);
+
+    while (true) {
+        ret = conn_get(conn, &msg, sizeof(msg));
+        if (ret < 1)
+            break;
+        if (msg.type == MSG_ADD_NODE)
+            alloc_add_node(&msg.u.node.config);
+        else
+            ABORT();
+    }
+
+    if (ret < 0)
+        printd("exiting with error\n");
+
+    return NULL;
+}
+
+/* this thread is persistent */
+static void *
+listen_thread(void *arg)
+{
+    struct sockconn conn;
+    struct sockconn newconn, *newp;
+    pthread_t tid; /* not used */
+    int ret = -1;
+
+    printd("listening on port %d\n", 67890);
+    if (conn_localbind(&conn, "67890"))
+        goto exit;
+
+    while (true) {
+        if ((ret = conn_accept(&conn, &newconn)))
+            break;
+        ret = -1;
+        newp = malloc(sizeof(*newp));
+        if (!newp)
+            break;
+        if (pthread_create(&tid, NULL, inbound_thread, (void*)newp))
+            break;
+        if (pthread_detach(tid))
+            break;
+    }
+
+exit:
+    if (ret < 0)
+        printd("exiting with error\n");
+
+    return NULL;
 }
 
 static void *
-queue_handler(void *arg)
+request_thread(void *arg)
 {
-    int pstate, err;
-    struct message msg;
-
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &pstate);
-    pthread_cleanup_push(queue_handler_cleanup, NULL);
-
-    handler_alive = true;
-
-    printd("mem thread alive\n");
-
-    while (true) {
-        while (!q_empty(&msg_q)) {
-            if (q_pop(&msg_q, &msg) != 0)
-                BUG(1);
-
-            printd("rank%d recv msg %s [%s]\n", nw_get_rank(),
-                    MSG_TYPE2STR(msg.type), MSG_STATUS2STR(msg.status));
-
-            err = 0;
-            if (msg.type == MSG_REQ_ALLOC)
-                err = process_req_alloc(&msg);
-            else if (msg.type == MSG_DO_ALLOC)
-                err = process_do_alloc(&msg);
-            else if (msg.type == MSG_ADD_NODE)
-                err = process_add_node(&msg);
-            else {
-                BUG(1);
-            }
-
-            if (err != 0)
-                BUG(1);
-        }
-        usleep(500);
-    }
-
-    pthread_cleanup_pop(1);
-    return NULL;
+    //struct message *m = (struct message*)arg;
+    pthread_exit(NULL);
 }
 
 /* Public functions */
@@ -219,36 +216,15 @@ queue_handler(void *arg)
 int
 mem_init(void)
 {
+    pthread_t tid; /* not used */
     printd("memory interface initializing\n");
 
-    if (nw_init() < 0)
+    if (pthread_create(&tid, NULL, listen_thread, NULL))
         return -1;
-
-    q_init(&msg_q, sizeof(struct message));
-    nw_set_recv_q(&msg_q);
+    if (pthread_detach(tid))
+        return -1;
 
     /* TODO collect memory information about node */
-
-    return 0;
-}
-
-int
-mem_launch(void)
-{
-    int err;
-
-    if (nw_launch() < 0)
-        return -1;
-
-    printd("memory interface launching worker thread\n");
-
-    if (handler_alive) return -1;
-    err = pthread_create(&handler_tid, NULL, queue_handler, NULL);
-    if (err < 0) return -1;
-    while (!handler_alive) ;
-
-    /* TODO inject messages containing static configuration of node (regarding
-     * memory capacity, etc) and send to all other ranks. expect no reply  */
 
     return 0;
 }
@@ -256,32 +232,24 @@ mem_launch(void)
 void
 mem_fin(void)
 {
-    nw_fin();
-
-    if (!handler_alive) return;
-    printd("memory interface finalizing\n");
-    if (0 == pthread_cancel(handler_tid))
-        pthread_join(handler_tid, NULL);
-    while (handler_alive) ;
-    q_free(&msg_q);
+    ; /* nothing */
 }
 
 /* message received from application */
 int
-mem_add_msg(struct message *m)
+mem_new_request(struct message *m)
 {
+    pthread_t tid;
     if (!m) return -1;
-    if (nw_get_rank() > 0)
-        send_rank(m, 0); /* send all messages from app directly to rank 0 */
-    else
-        q_push(&msg_q, m); /* we are rank0, no need to send to ourself */
+    if (pthread_create(&tid, NULL, request_thread, (void*)m))
+        return -1;
+    if (pthread_detach(tid))
+        return -1;
     return 0;
 }
 
 void
-mem_set_outbox(struct queue *ob)
+mem_set_outbox(struct queue *q)
 {
-    if (!ob)
-        return;
-    outbox = ob;
+    BUG(!(outbox = q));
 }

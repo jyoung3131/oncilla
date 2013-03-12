@@ -71,7 +71,7 @@ __find_node(int rank)
 /* Public functions */
 
 int
-alloc_add_node(int rank, struct alloc_node_config *c)
+alloc_add_node(struct alloc_node_config *c)
 {
     struct node *n;
 
@@ -81,7 +81,6 @@ alloc_add_node(int rank, struct alloc_node_config *c)
     if (!n) ABORT();
 
     INIT_LIST_HEAD(&n->link);
-    n->rank = rank;
     n->c = *c;
 
     lock_nodes();

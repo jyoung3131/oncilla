@@ -16,29 +16,21 @@ import sys
 
 # C configuration environment
 
-mpi_path = '/usr/lib64/openmpi'
-mpi_libpath = mpi_path + 'lib/'
-mpi_include = '/usr/include/openmpi-x86_64'
-mpi_libs = ['mpi']
-
 ib_libs = ['rdmacm', 'ibverbs']
 
-gcc = mpi_path + '/bin/mpicc'
-gccfilter = './gccfilter -c '
+gcc = 'clang'
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
 
-if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
-    gcc = gccfilter + gcc
+libpath = []
+libs = [ib_libs, 'rt']
 
-if int(ARGUMENTS.get('dbg', 0)): # prefix gccfilter to assist with compilation
+if int(ARGUMENTS.get('debug', 0)):
     ccflags.extend(['-ggdb', '-O0'])
+    libs.append('mcheck')
 
-cpath = [os.getcwd() + '/inc', mpi_include]
-
-libpath = [mpi_libpath]
-libs = [mpi_libs, ib_libs, 'rt']
+cpath = [os.getcwd() + '/inc']
 
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBS = libs)

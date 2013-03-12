@@ -91,7 +91,7 @@ enum alloc_do_type
 
 /* Function prototypes */
 
-int alloc_add_node(int rank, struct alloc_node_config *c/*in*/);
+int alloc_add_node(struct alloc_node_config *c/*in*/);
 int alloc_find(struct alloc_request *r/*in*/, struct alloc_ation *a/*out*/);
 int alloc_ate(struct alloc_ation *a/*in*/);
 

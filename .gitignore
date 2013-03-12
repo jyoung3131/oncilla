@@ -12,3 +12,4 @@ test/ib_daemon
 test/pmsg_client
 test/pmsg_daemon
 test/test
+test/ocm_test

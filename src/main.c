@@ -8,6 +8,7 @@
  */
 
 /* System includes */
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,6 @@
 
 /* Project includes */
 #include <debug.h>
-#include <io/nw.h>
 #include <mem.h>
 #include <pmsg.h>
 
@@ -101,8 +101,7 @@ process_msg(struct message *msg)
     /* all other messages */
     default:
     {
-        msg->rank = nw_get_rank();
-        mem_add_msg(msg);
+        mem_new_request(msg);
     }
     break;
 
@@ -117,10 +116,12 @@ poll_mailbox(void *arg)
     printd("mailbox poller alive\n");
 
     while (true) {
+        /* <-- send out */
         while (!q_empty(&outbox)) {
             q_pop(&outbox, &msg);
             pmsg_send(msg.pid, &msg);
         }
+        /* --> pull in for processing */
         while (pmsg_pending() > 0) {
             if (pmsg_recv(&msg, false) < 0)
                 pthread_exit(NULL);
@@ -151,13 +152,13 @@ notify_rank0(void)
     msg.type    = MSG_ADD_NODE;
     msg.status  = MSG_NO_STATUS;    /* not used */
     msg.pid     = -1;               /* not used */
-    msg.rank    = nw_get_rank();
+    //msg.rank    = nw_get_rank();
     memset(&msg.u.node.config, 0, sizeof(msg.u.node.config)); /* TODO */
     if (gethostname(msg.u.node.config.hostname, HOST_NAME_MAX))
         return -1;
     if (ib_nic_ip(0, msg.u.node.config.ib_ip, HOST_NAME_MAX))
         return -1;
-    if (mem_add_msg(&msg))
+    if (mem_new_request(&msg))
         return -1;
     return 0;
 }
@@ -187,11 +188,6 @@ int main(int argc, char *argv[])
     }
     if (launch_poll_thread() < 0) {
         fprintf(stderr, "error launching poll thread\n");
-        return -1;
-    }
-
-    if (mem_launch() < 0) {
-        fprintf(stderr, "error launching\n");
         return -1;
     }
 
