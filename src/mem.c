@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -29,7 +30,18 @@
 
 /* Internal definitions */
 
+struct node_entry
+{
+    char dns[HOST_NAME_MAX];
+    char ip_eth[HOST_NAME_MAX];
+    int  ocm_port;
+    int  rdmacm_port;
+};
+
 /* Internal state */
+static int myrank = -1;
+static struct node_entry *node_file = NULL; /* idx is rank */
+static int node_file_entries = 0;
 
 /* TODO need list representing pending alloc requests */
 
@@ -43,6 +55,58 @@ send_pid(struct message *m, pid_t to_pid)
     printd("%s %d\n", __func__, to_pid);
     m->pid = to_pid;
     q_push(outbox, m);
+}
+
+static int
+parse_nodefile(const char *path)
+{
+    int entries = 0;
+    char *buf = NULL;
+    const int buf_len = 256;
+    FILE *file = NULL;
+    struct node_entry *e;
+    int ret = -1, rank;
+
+    if (!path)
+        goto out;
+    if (!(file = fopen(path, "r")))
+        goto out;
+    if (!(buf = calloc(1, buf_len)))
+        goto out;
+
+    while (fgets(buf, buf_len, file))
+        if (*buf != '#')
+            entries++;
+    fseek(file, 0, 0);
+    node_file = calloc(entries, sizeof(*node_file));
+    if (!node_file)
+        goto out;
+
+    while (fgets(buf, buf_len, file)) {
+        if (*buf == '#')
+            continue;
+        sscanf(buf, "%d", &rank);
+        if (rank > entries - 1)
+            goto out;
+        printd("parsing %s", buf);
+        e = &node_file[rank];
+        /* XXX use strtok since e->dns and e->ip_eth could overflow */
+        /* http://docs.roxen.com/pike/7.0/tutorial/strings/sscanf.xml */
+        sscanf(buf, "%*d %s %s %d %d",
+                e->dns, e->ip_eth, &e->ocm_port, &e->rdmacm_port);
+    }
+
+    node_file_entries = entries;
+    ret = 0;
+
+out:
+    if (file)
+        fclose(file);
+    if (buf)
+        free(buf);
+    if (ret < 0 && node_file)
+        free(node_file);
+    return ret;
 }
 
 #if 0
@@ -146,6 +210,7 @@ process_do_free(struct message *m)
 }
 #endif
 
+/* <-- process requests from other daemons */
 static void *
 inbound_thread(void *arg)
 {
@@ -154,6 +219,7 @@ inbound_thread(void *arg)
     int ret = 0;
 
     BUG(!conn);
+    printd("%s spawned\n", __func__);
 
     while (true) {
         ret = conn_get(conn, &msg, sizeof(msg));
@@ -161,8 +227,10 @@ inbound_thread(void *arg)
             break;
         if (msg.type == MSG_ADD_NODE)
             alloc_add_node(&msg.u.node.config);
-        else
-            ABORT();
+        else {
+            printd("unhandled message %s\n", MSG_TYPE2STR(msg.type));
+            BUG(1);
+        }
     }
 
     if (ret < 0)
@@ -204,20 +272,60 @@ exit:
     return NULL;
 }
 
+/* --> process and send messages out to fulfill request */
 static void *
 request_thread(void *arg)
 {
-    //struct message *m = (struct message*)arg;
+    int ret = -1;
+    struct message *msg = (struct message*)arg;
+    struct sockconn conn;
+    char port[HOST_NAME_MAX];
+
+    BUG(!msg);
+    printd("%s spawned, msg %d\n", __func__, msg->type);
+
+    if (msg->type == MSG_ADD_NODE) {
+        if (myrank == 0) {
+            /* special case -- we are notifying ourself */
+            alloc_add_node(&msg->u.node.config);
+        } else {
+            /* forward to rank 0 */
+            snprintf(port, HOST_NAME_MAX, "%d", node_file[0].ocm_port);
+            if (conn_connect(&conn, node_file[0].ip_eth, port))
+                goto out;
+            ret = conn_put(&conn, msg, sizeof(*msg));
+            if (ret < 1)
+                goto out;
+            if ((ret = conn_close(&conn)))
+                goto out;
+        }
+    }
+
+    else {
+        printd("unhandled message %s\n", MSG_TYPE2STR(msg->type));
+        BUG(1);
+    }
+
+    ret = 0;
+
+out:
+    if (conn_is_connected(&conn))
+        conn_close(&conn);
+    free(msg);
+    printd("exiting%s\n", (ret < 0 ? " with error" : " normally"));
     pthread_exit(NULL);
 }
 
 /* Public functions */
 
 int
-mem_init(void)
+mem_init(const char *nodefile_path)
 {
     pthread_t tid; /* not used */
     printd("memory interface initializing\n");
+
+    if (parse_nodefile(nodefile_path))
+        return -1;
 
     if (pthread_create(&tid, NULL, listen_thread, NULL))
         return -1;
@@ -232,16 +340,21 @@ mem_init(void)
 void
 mem_fin(void)
 {
-    ; /* nothing */
+    ; /* TODO kill listen thread */
 }
 
 /* message received from application */
 int
 mem_new_request(struct message *m)
 {
+    struct message *new_msg;
     pthread_t tid;
     if (!m) return -1;
-    if (pthread_create(&tid, NULL, request_thread, (void*)m))
+    new_msg = malloc(sizeof(*new_msg));
+    if (!new_msg)
+        return -1;
+    memcpy(new_msg, m, sizeof(*m));
+    if (pthread_create(&tid, NULL, request_thread, (void*)new_msg))
         return -1;
     if (pthread_detach(tid))
         return -1;

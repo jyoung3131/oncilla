@@ -70,6 +70,7 @@ int conn_connect(
 fail:
 	if(conn->socket > -1)
 		close(conn->socket);
+    conn->socket = -1;
 	if(results)
 		freeaddrinfo(results);
 	return exit_errno;
@@ -251,3 +252,10 @@ int conn_get(struct sockconn *conn, void *data, int len)
 	return 1;
 }
 
+bool conn_is_connected(struct sockconn *conn)
+{
+    bool ret = false;
+    if (conn && conn->socket >= 0)
+        ret = true;
+    return ret;
+}

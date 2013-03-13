@@ -163,18 +163,29 @@ notify_rank0(void)
     return 0;
 }
 
+static void
+usage(int argc, char *argv[])
+{
+    fprintf(stderr, "Usage: %s nodefile\n", *argv);
+}
+
 int main(int argc, char *argv[])
 {
     printd("Verbose printing enabled\n");
 
+    if (argc != 2) {
+        usage(argc, argv);
+        return -1;
+    }
+
     q_init(&outbox, sizeof(struct message));
 
-    if (mem_init() < 0) {
+    if (mem_init(argv[1]) < 0) {
         fprintf(stderr, "error initializing mem\n");
         return -1;
     }
 
-    /* mem will append msgs to apps into this queue */
+    /* <-- mem sends msgs to apps via this queue */
     mem_set_outbox(&outbox);
 
     pmsg_cleanup();

@@ -44,5 +44,6 @@ int conn_get(struct sockconn *conn, void *data, int len);
 // writes out hostname (length >= INET_ADDRSTRLEN)
 // of peer connecting to us via 'conn'
 int conn_peername(struct sockconn *conn, char *hostname);
+bool conn_is_connected(struct sockconn *conn);
 
 #endif
