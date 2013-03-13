@@ -152,7 +152,6 @@ notify_rank0(void)
     msg.type    = MSG_ADD_NODE;
     msg.status  = MSG_NO_STATUS;    /* not used */
     msg.pid     = -1;               /* not used */
-    //msg.rank    = nw_get_rank();
     memset(&msg.u.node.config, 0, sizeof(msg.u.node.config)); /* TODO */
     if (gethostname(msg.u.node.config.hostname, HOST_NAME_MAX))
         return -1;
@@ -180,32 +179,22 @@ int main(int argc, char *argv[])
 
     q_init(&outbox, sizeof(struct message));
 
-    if (mem_init(argv[1]) < 0) {
-        fprintf(stderr, "error initializing mem\n");
+    if (mem_init(argv[1]) < 0)
         return -1;
-    }
 
     /* <-- mem sends msgs to apps via this queue */
     mem_set_outbox(&outbox);
 
     pmsg_cleanup();
-    if (pmsg_init(sizeof(struct message)) < 0) {
-        fprintf(stderr, "error initializing pmsg\n");
+    if (pmsg_init(sizeof(struct message)) < 0)
         return -1;
-    }
-    if (pmsg_open(PMSG_DAEMON_PID) < 0) {
-        fprintf(stderr, "error opening recv mailbox\n");
+    if (pmsg_open(PMSG_DAEMON_PID) < 0)
         return -1;
-    }
-    if (launch_poll_thread() < 0) {
-        fprintf(stderr, "error launching poll thread\n");
+    if (launch_poll_thread() < 0)
         return -1;
-    }
 
-    if (notify_rank0()) {
-        printd("notify rank0 failed\n");
+    if (notify_rank0())
         return -1;
-    }
 
     /* TODO Need to wait on signal or something instead of sleeping */
     sleep(3600);

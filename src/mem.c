@@ -58,11 +58,11 @@ send_pid(struct message *m, pid_t to_pid)
 }
 
 static int
-parse_nodefile(const char *path)
+parse_nodefile(const char *path, int *_myrank /* out */)
 {
     int entries = 0;
     char *buf = NULL;
-    const int buf_len = 256;
+    const int buf_len = 256 + HOST_NAME_MAX;
     FILE *file = NULL;
     struct node_entry *e;
     int ret = -1, rank;
@@ -95,6 +95,16 @@ parse_nodefile(const char *path)
         sscanf(buf, "%*d %s %s %d %d",
                 e->dns, e->ip_eth, &e->ocm_port, &e->rdmacm_port);
     }
+
+    if (gethostname(buf, HOST_NAME_MAX))
+        goto out;
+    rank = entries;
+    while (rank-- > 0)
+        if (0 == strncmp(node_file[rank].dns, buf, HOST_NAME_MAX))
+            break;
+    if (rank < 0)
+        goto out;
+    *_myrank = rank;
 
     node_file_entries = entries;
     ret = 0;
@@ -247,18 +257,20 @@ listen_thread(void *arg)
     struct sockconn newconn, *newp;
     pthread_t tid; /* not used */
     int ret = -1;
+    char port[HOST_NAME_MAX];
 
-    printd("listening on port %d\n", 67890);
-    if (conn_localbind(&conn, "67890"))
+    snprintf(port, HOST_NAME_MAX, "%d", node_file[myrank].ocm_port);
+    printd("listening on port %s\n", port);
+    if (conn_localbind(&conn, port))
         goto exit;
 
     while (true) {
         if ((ret = conn_accept(&conn, &newconn)))
             break;
         ret = -1;
-        newp = malloc(sizeof(*newp));
-        if (!newp)
+        if (!(newp = malloc(sizeof(*newp))))
             break;
+        *newp = newconn;
         if (pthread_create(&tid, NULL, inbound_thread, (void*)newp))
             break;
         if (pthread_detach(tid))
@@ -282,14 +294,14 @@ request_thread(void *arg)
     char port[HOST_NAME_MAX];
 
     BUG(!msg);
-    printd("%s spawned, msg %d\n", __func__, msg->type);
+    printd("%s spawned, msg %s\n", __func__, MSG_TYPE2STR(msg->type));
 
     if (msg->type == MSG_ADD_NODE) {
         if (myrank == 0) {
-            /* special case -- we are notifying ourself */
+            printd("adding myself\n");
             alloc_add_node(&msg->u.node.config);
         } else {
-            /* forward to rank 0 */
+            printd("forwarding to rank 0\n");
             snprintf(port, HOST_NAME_MAX, "%d", node_file[0].ocm_port);
             if (conn_connect(&conn, node_file[0].ip_eth, port))
                 goto out;
@@ -324,8 +336,10 @@ mem_init(const char *nodefile_path)
     pthread_t tid; /* not used */
     printd("memory interface initializing\n");
 
-    if (parse_nodefile(nodefile_path))
+    if (parse_nodefile(nodefile_path, &myrank))
         return -1;
+    printd("i am rank %d\n", myrank);
+    BUG(myrank < 0);
 
     if (pthread_create(&tid, NULL, listen_thread, NULL))
         return -1;
@@ -347,13 +361,11 @@ mem_fin(void)
 int
 mem_new_request(struct message *m)
 {
-    struct message *new_msg;
+    struct message *new_msg = malloc(sizeof(*new_msg));
     pthread_t tid;
-    if (!m) return -1;
-    new_msg = malloc(sizeof(*new_msg));
-    if (!new_msg)
+    if (!m || !new_msg)
         return -1;
-    memcpy(new_msg, m, sizeof(*m));
+    *new_msg = *m;
     if (pthread_create(&tid, NULL, request_thread, (void*)new_msg))
         return -1;
     if (pthread_detach(tid))
