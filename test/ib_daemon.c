@@ -56,17 +56,17 @@ static int alloc_test(long long unsigned int size_B)
 {
 	ib_t ib;
 	struct ib_params params;
-	unsigned int *buf = NULL;
-	unsigned long long num_bufs_to_alloc = size_B / sizeof(*buf);
-	printf("Size of buf is %lu B so we allocate %llu buffers for a total of %llu B\n", sizeof(*buf), num_bufs_to_alloc, size_B);
+	char *buf = NULL;
+	unsigned long long len = size_B / sizeof(*buf);
+	printf("Size of buf is %lu B so we allocate %llu buffers for a total of %llu B\n", sizeof(*buf), len, size_B);
 
-	if (!(buf = calloc(num_bufs_to_alloc, sizeof(*buf))))
+	if (!(buf = calloc(len, sizeof(*buf))))
 		return -1;
 	
 	params.addr     = NULL;
 	params.port     = 12345;
 	params.buf      = buf;
-	params.buf_len  = num_bufs_to_alloc;
+	params.buf_len  = len;
 
 	if (!(ib = setup(&params)))
 		return -1;
@@ -85,13 +85,14 @@ static int read_write_test(void){
 	ib_t ib;
 	struct ib_params params;
 	char *buf = NULL;
+	//Allocate 4 GB of data
 	size_t count = pow(2,32)+1;
 	size_t len = count * sizeof(*buf);
 
 	if (!(buf = calloc(count, sizeof(*buf))))
 		return -1;
 
-  printf("Daemon allocating %lu B of memory\n", len);
+  printf("Daemon allocating %lu B or %3f GB of memory\n", len, ((double)count/pow(2,30.0)));
 
 	params.addr     = NULL;
 	params.port     = 23456;
@@ -102,12 +103,13 @@ static int read_write_test(void){
 		printf("setup failed\n");
 		return -1;
 	}
+
+	printf("Waiting for reads / writes from the client - enter Ctrl-D to exit\n");
 	while((getchar()!=EOF)){
 
 	}
 	
-
-	  if(teardown(ib) != 0)
+	if(teardown(ib) != 0)
 	  return -1;
 	
 	return 0;
@@ -210,7 +212,7 @@ int main(int argc, char *argv[])
 	if (argc != 3) {
 usage:
 		fprintf(stderr, "Usage: %s <test_num> <alloc_size_MB>\n"
-       "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc\n"
+       "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write daemon\n"
        "\talloc_size: can be specified in any positive decimal format\n", argv[0]);
 
 		return -1;
@@ -249,7 +251,7 @@ usage:
 				printf("pass: alloc_test\n");
 			break;
 		case 3:
-			printf("Running read/write test with starting buffer size %4f MB and %lu B\n", reg_size_MB, reg_size_B);
+			printf("Running daemon for read/write test\n");
 			if(read_write_test()){
 			    fprintf(stderr, "FAIL: read/write test\n");
 			    return -1;

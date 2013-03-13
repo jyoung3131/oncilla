@@ -223,7 +223,7 @@ ib_client_connect(struct ib_alloc *ib)
     //print all timer results here
     #ifdef TIMING
     printf("[CONNECT] Time for ibv_reg_mr: %lu ns \n"
-           "[CONNECT] Time for rdma_creqte_qp: %lu ns\n"
+           "[CONNECT] Time for rdma_create_qp: %lu ns\n"
            "[CONNECT] Time for total server connection: %lu ns\n"
            ,ib_mem_reg_ns, ib_create_qp_ns, ib_total_conn_ns_sum);
     #endif

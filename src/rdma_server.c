@@ -55,6 +55,7 @@ ib_server_connect(struct ib_alloc *ib)
   TIMER_START(ib_server_conn_timer);
   #endif
 
+
    /* 1. Set up RDMA CM structures */
 
     struct sockaddr_in addr;
@@ -66,16 +67,14 @@ ib_server_connect(struct ib_alloc *ib)
         return -1;
 
     printf("Port number in server_connect is %d\n", ib->params.port);
+	
 
     addr.sin_family      = AF_INET;
     addr.sin_port        = htons(ib->params.port);
-    //addr.sin_port        = 12345;
-    //inet_aton("10.0.0.2", (struct in_addr *)&addr.sin_addr.s_addr);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     /* Bind to local port and listen for
      * connection request */
-    printf("addr.sin_port = %d\n", addr.sin_port);
 
     if (rdma_bind_addr(ib->rdma.listen_id, (struct sockaddr *) &addr))
     {
@@ -237,6 +236,7 @@ ib_server_connect(struct ib_alloc *ib)
            "[CONNECT] Time for total server connection: %lu ns\n",
             ib_mem_reg_ns,ib_create_qp_ns, ib_total_conn_ns_sum);
     #endif
+
     return 0;
 }
   int

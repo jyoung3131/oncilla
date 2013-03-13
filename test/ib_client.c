@@ -84,13 +84,13 @@ static int alloc_test(long long unsigned int size_B)
 }
 
 /* write/read to/from remote memory timing test. */
-static int read_write_test(long long unsigned int size_B)
+static int read_write_test()
 {
-    //TIMER_DECLARE1(ib_read_timer);
+    TIMER_DECLARE1(ib_read_timer);
     TIMER_DECLARE1(ib_write_timer);
     #ifdef TIMING
     uint64_t ib_write_time_ns = 0;
-    //uint64_t ib_read_time_ns = 0;
+    uint64_t ib_read_time_ns = 0;
     #endif
     
 
@@ -98,32 +98,31 @@ static int read_write_test(long long unsigned int size_B)
     struct ib_params params;
     char *buf = NULL;
 
-    size_t count = pow(2,32)+1;
-    size_t len= count*sizeof(*buf);
-    //long long unsigned int size_B2= size_B;
+    unsigned long long count = pow(2,32)+1;
+    unsigned long long len= count*sizeof(*buf);
+    long long unsigned int size_B=64;
+    long long unsigned int size_B2= size_B;
 
     if (!(buf = calloc(count, sizeof(*buf)))){
 	    printf("memory allocation failed\n");
             return -1;
     }
-    printf("size of count: %lu\n", count);
+    printf("size of count: %llu\n", count);
     printf("size of *buf : %lu\n", sizeof(*buf));
 
     params.addr     = serverIP;
     params.port     = 23456;
     params.buf      = buf;
     params.buf_len  = len;
-    printf("setting up\n");
+    printf("Setting up\n");
     if (!(ib = setup(&params))){
-        printf("setup failed\n");
+        printf("Setup failed\n");
 	    return -1;
     }
-    printf("setting done\n");
-    
-    
-     //while(size_B<=pow(2,31)){
-	//len=size_B;
-  len=(pow(2,31)-1);
+    printf("Setup done\n");
+
+  while(size_B<=pow(2,30)){
+	len=size_B;
 	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B);
 	#endif
@@ -139,11 +138,11 @@ static int read_write_test(long long unsigned int size_B)
 	TIMER_CLEAR(ib_write_timer);
 	printf("[W] time to write %llu bytes: %lu \n", size_B, ib_write_time_ns);     
 	#endif 
-	/*memset(buf, 0, len);
+	memset(buf, 0, len);
     	size_B*=2;
 	}
 	// read back and wait for completion
-      while(size_B2<=pow(2,31)){
+      while(size_B2<=pow(2,30)){
     	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B2);
 	#endif
@@ -157,11 +156,11 @@ static int read_write_test(long long unsigned int size_B)
 	}
 	TIMER_END(ib_read_timer, ib_read_time_ns);
 	TIMER_CLEAR(ib_read_timer);
-	printf("[R] time to read %lu bytes: %lu \n", len, ib_read_time_ns);
+	printf("[R] time to read %llu bytes: %lu \n", len, ib_read_time_ns);
 	#endif
 	
 	size_B2*=2;
-	}*/
+	}
 	//Perform teardown
 	if(teardown(ib) != 0){
 	  printf("tear down error\n");
@@ -328,7 +327,7 @@ usage:
         break;
     case 3:
 	printf("Running read/write test with buffer size beginning with %4f MB and %lu B\n", reg_size_MB, reg_size_B);
-	if(read_write_test(reg_size_B)){
+	if(read_write_test()){
 	    fprintf(stderr, "FAIL: read/write test\n");
 	    return -1;
 	} else
