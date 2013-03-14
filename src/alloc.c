@@ -18,19 +18,13 @@
 #include <alloc.h>
 #include <debug.h>
 #include <util/list.h>
+#include <nodefile.h>
 
 /* Directory includes */
 
 /* Globals */
 
 /* Internal definitions */
-
-struct node
-{
-    struct list_head link;
-    int rank;
-    struct alloc_node_config c;
-};
 
 /* Internal state */
 
@@ -41,16 +35,6 @@ static pthread_mutex_t allocs_lock = PTHREAD_MUTEX_INITIALIZER;
 static LIST_HEAD(allocs);
 static unsigned int num_allocs = 0;
 
-/* struct node list */
-static pthread_mutex_t nodes_lock = PTHREAD_MUTEX_INITIALIZER;
-static LIST_HEAD(nodes);
-static unsigned int num_nodes = 0;
-
-#define for_each_node(node, nodes) \
-    list_for_each_entry(node, &nodes, link)
-#define lock_nodes()    pthread_mutex_lock(&nodes_lock)
-#define unlock_nodes()  pthread_mutex_unlock(&nodes_lock)
-
 #define for_each_alloc(alloc, allocs) \
     list_for_each_entry(alloc, &allocs, link)
 #define lock_allocs()    pthread_mutex_lock(&allocs_lock)
@@ -58,56 +42,33 @@ static unsigned int num_nodes = 0;
 
 /* Private functions */
 
-static struct node *
-__find_node(int rank)
-{
-    struct node *n = NULL;
-    for_each_node(n, nodes)
-        if (n->rank == rank)
-            break;
-    return n;
-}
-
 /* Public functions */
 
 int
-alloc_add_node(struct alloc_node_config *c)
+alloc_add_node(int rank, struct alloc_node_config *config)
 {
-    struct node *n;
-
-    if (!c) return -1;
-
-    n = calloc(1, sizeof(*n));
-    if (!n) ABORT();
-
-    INIT_LIST_HEAD(&n->link);
-    n->c = *c;
-
-    lock_nodes();
-    list_add(&n->link, &nodes);
-    num_nodes++;
-    unlock_nodes();
-
-    /* TODO update this debug print to include all config info */
+    struct node_entry *node;
+    if (!config) return -1;
+    BUG(rank > node_file_entries - 1);
+    node = &node_file[rank];
+    BUG(node->config);
+    node->config = malloc(sizeof(*config));
+    if (!node->config)
+        return -1;
+    *(node->config) = *config;
     printd("node joined: rank %d dns %s ib_ip %s\n",
-            n->rank, n->c.hostname, n->c.ib_ip);
+            rank, node->dns, node->config->ib_ip);
     return 0;
 }
 
-/* TODO remove node? MPI v3 is what supports dynamic process joining/removing
- * the communication set... otherwise we assume all ranks/nodes that are up are
- * all immediately available and don't go away */
-
-/* consults the metadata to locate (and reserve) memories. only rank 0 executes
- * this code */
 int
 alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 {
-    struct node *node = NULL;
+    struct node_entry *node = NULL;
 
     if (!req || !alloc) return -1;
 
-    if (num_nodes == 1)
+    if (node_file_entries == 1)
         req->type = ALLOC_MEM_HOST;
 
     alloc->orig_rank    = req->orig_rank;
@@ -118,10 +79,12 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
         alloc->remote_rank = req->orig_rank;
     
     else if (req->type == ALLOC_MEM_RDMA) {
-        alloc->remote_rank = (req->orig_rank + 1) % num_nodes; /* XXX */
-        BUG(!(node = __find_node(alloc->remote_rank)));
-        strncpy(alloc->u.rdma.ib_ip, node->c.ib_ip, HOST_NAME_MAX);
-        alloc->u.rdma.port = 12345; /* XXX pick a random number */
+        printd("req orig rank %d, num nodes %d\n",
+                req->orig_rank, node_file_entries);
+        alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
+        node = &node_file[alloc->remote_rank];
+        strncpy(alloc->u.rdma.ib_ip, node->config->ib_ip, HOST_NAME_MAX);
+        alloc->u.rdma.port = node->rdmacm_port;
         printd("alloc: rdma on %s rank %d\n",
                 alloc->u.rdma.ib_ip, alloc->remote_rank);
     }

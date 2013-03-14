@@ -23,6 +23,7 @@
 #include <msg.h>
 #include <sock.h>
 #include <util/queue.h>
+#include <nodefile.h>
 
 /* Directory includes */
 
@@ -30,18 +31,8 @@
 
 /* Internal definitions */
 
-struct node_entry
-{
-    char dns[HOST_NAME_MAX];
-    char ip_eth[HOST_NAME_MAX];
-    int  ocm_port;
-    int  rdmacm_port;
-};
-
 /* Internal state */
 static int myrank = -1;
-static struct node_entry *node_file = NULL; /* idx is rank */
-static int node_file_entries = 0;
 
 /* TODO need list representing pending alloc requests */
 
@@ -57,168 +48,178 @@ send_pid(struct message *m, pid_t to_pid)
     q_push(outbox, m);
 }
 
+/* send then recv 1 message with rank */
 static int
-parse_nodefile(const char *path, int *_myrank /* out */)
+send_recv_msg(struct message *msg, int rank)
 {
-    int entries = 0;
-    char *buf = NULL;
-    const int buf_len = 256 + HOST_NAME_MAX;
-    FILE *file = NULL;
-    struct node_entry *e;
-    int ret = -1, rank;
-
-    if (!path)
+    int ret = -1, i = 2;
+    char port[HOST_NAME_MAX];
+    struct sockconn conn;
+    memset(&conn, 0, sizeof(conn));
+    BUG(!msg);
+    BUG(rank > node_file_entries - 1);
+    snprintf(port, HOST_NAME_MAX, "%d", node_file[rank].ocm_port);
+    if (conn_connect(&conn, node_file[rank].ip_eth, port))
         goto out;
-    if (!(file = fopen(path, "r")))
-        goto out;
-    if (!(buf = calloc(1, buf_len)))
-        goto out;
-
-    while (fgets(buf, buf_len, file))
-        if (*buf != '#')
-            entries++;
-    fseek(file, 0, 0);
-    node_file = calloc(entries, sizeof(*node_file));
-    if (!node_file)
-        goto out;
-
-    while (fgets(buf, buf_len, file)) {
-        if (*buf == '#')
-            continue;
-        sscanf(buf, "%d", &rank);
-        if (rank > entries - 1)
-            goto out;
-        printd("parsing %s", buf);
-        e = &node_file[rank];
-        /* XXX use strtok since e->dns and e->ip_eth could overflow */
-        /* http://docs.roxen.com/pike/7.0/tutorial/strings/sscanf.xml */
-        sscanf(buf, "%*d %s %s %d %d",
-                e->dns, e->ip_eth, &e->ocm_port, &e->rdmacm_port);
-    }
-
-    if (gethostname(buf, HOST_NAME_MAX))
-        goto out;
-    rank = entries;
-    while (rank-- > 0)
-        if (0 == strncmp(node_file[rank].dns, buf, HOST_NAME_MAX))
+    while (i-- > 0) {
+        switch (i) {
+        case 1: ret = conn_put(&conn, msg, sizeof(*msg)); break;
+        case 0: ret = conn_get(&conn, msg, sizeof(*msg)); break;
+        }
+        if (--ret < 0) /* 0 means remote closed; turn into error condition */
             break;
-    if (rank < 0)
+    }
+    if (ret < 0 || (ret = conn_close(&conn)))
         goto out;
-    *_myrank = rank;
-
-    node_file_entries = entries;
     ret = 0;
-
 out:
-    if (file)
-        fclose(file);
-    if (buf)
-        free(buf);
-    if (ret < 0 && node_file)
-        free(node_file);
+    /* TODO close connection on error */
     return ret;
 }
 
+/* send 1 message to rank */
+static int
+send_msg(struct message *msg, int rank)
+{
+    int ret = -1;
+    char port[HOST_NAME_MAX];
+    struct sockconn conn;
+    memset(&conn, 0, sizeof(conn));
+    BUG(!msg);
+    BUG(rank > node_file_entries - 1);
+    snprintf(port, HOST_NAME_MAX, "%d", node_file[rank].ocm_port);
+    if (conn_connect(&conn, node_file[rank].ip_eth, port))
+        goto out;
+    ret = conn_put(&conn, msg, sizeof(*msg));
+    if (--ret < 0) /* 0 means remote closed; turn into error condition */
+        goto out;
+    if ((ret = conn_close(&conn)))
+        goto out;
+    ret = 0;
+out:
+    return ret;
+}
+
+/* message handlers */
+
+static int
+__msg_add_node(struct message *msg)
+{
+    return alloc_add_node(msg->rank, &msg->u.node.config);
+}
+
+static int
+msg_send_add_node(struct message *msg)
+{
+    int ret;
+    if (myrank == 0)
+        ret = __msg_add_node(msg);
+    else
+        ret = send_msg(msg, 0);
+    return ret;
+}
+
+static int
+msg_recv_add_node(struct message *msg)
+{
+    BUG(!msg); BUG(myrank != 0);
+    return __msg_add_node(msg);
+}
+
+static void
+__msg_do_alloc(struct message *msg)
+{
+    BUG(alloc_ate(&msg->u.alloc));
+}
+
+static int
+msg_send_do_alloc(struct message *msg)
+{
+    int ret = 0;
+    BUG(!msg);
+    BUG(msg->type != MSG_DO_ALLOC);
+    BUG(msg->u.alloc.remote_rank > node_file_entries - 1);
+    BUG(msg->u.alloc.remote_rank == myrank);
+
+    ret = send_recv_msg(msg, msg->u.alloc.remote_rank);
+    if (ret)
+        goto out;
+    send_pid(msg, msg->pid);
+
+    ret = 0;
+out:
+    return ret;
+}
+
+static void
+msg_recv_do_alloc(struct message *msg)
+{
+    BUG(!msg);
+    __msg_do_alloc(msg);
+}
+
+/* TODO */
 #if 0
-/* message type MSG_REQ_ALLOC */
-static int
-process_req_alloc(struct message *m)
-{
-    int err;
-    /* new allocation request */
-    if (m->status == MSG_REQUEST) {
-        BUG(nw_get_rank() > 0);
-        struct alloc_ation alloc;
-        printd("got msg from pid %d rank %d\n", m->pid, m->rank);
-        /* make request, copy result */
-        m->u.req.orig_rank = m->rank;
-        err = alloc_find(&m->u.req, &alloc);
-        BUG(err < 0);
-        m->u.alloc = alloc; /* this assignment destroys req state */
-        m->status = MSG_RESPONSE;
-        /* TODO add new allocation to internal list as pending */
-        send_rank(m, m->rank); /* return to origin */
-    }
-    else if (m->status == MSG_RESPONSE) {
-        m->type = MSG_DO_ALLOC;
-        m->status = MSG_REQUEST;
-        if (m->u.alloc.type == ALLOC_MEM_HOST) {
-            printd("send msg %d to pid %d\n", m->type, m->pid);
-            send_pid(m, m->pid);
-        } else if (m->u.alloc.type == ALLOC_MEM_RDMA) {
-            /* rank will set up RDMA CM server, waiting for client to connect.
-             * It will send a DO_ALLOC response, we'll then tell the app to
-             * connect. */
-            printd("send msg %d to rank %d\n", m->type, m->rank);
-            send_rank(m, m->rank); 
-        } else if (m->u.alloc.type == ALLOC_MEM_RMA) {
-            printd("RMA allocations not yet coded\n");
-            BUG(1);
-        } else {
-            BUG(1);
-        }
-    }
-    return 0;
-}
 
-/* XXX refactor this somehow.. ugly use of a thread? */
-static void *
-alloc_thread(void *arg)
-{
-    struct message *m = (struct message*)arg;
-    BUG(!m);
-    printd("thread spawned to wait for client connection\n");
-    alloc_ate(&m->u.alloc); /* initialize RDMA CM server (blocks!) */
-    printd("done\n");
-    free(m);
-    m = NULL;
-    pthread_exit(NULL);
-}
-
-/* message type MSG_DO_ALLOC */
-/* XXX we assume an allocation request is not partitioned for now. this means
- * that a response to a do_alloc is the last remaining message before releasing
- * the application */
-static int
-process_do_alloc(struct message *m)
-{
-    pthread_t pid;
-    struct message *mptr = malloc(sizeof(*mptr));
-    ABORT2(!mptr);
-    *mptr = *m;
-    /* in-coming RMA/RDMA request from another node */
-    if (m->status == MSG_REQUEST) {
-        m->status = MSG_RESPONSE;
-        send_rank(m, m->rank); /* tell app to connect to us */
-        if (pthread_create(&pid, NULL, alloc_thread, (void*)mptr))
-            ABORT();
-    }
-    /* in-coming response from app or rank that it completed a DO_ALLOC request */
-    else if (m->status == MSG_RESPONSE) {
-        m->type = MSG_RELEASE_APP;
-        m->status = MSG_NO_STATUS;
-        /* TODO put allocation state into message, send to app and rank 0 */
-        send_pid(m, m->pid);
-    }
-    return 0;
-}
+static void
+__msg_do_free(struct message *msg) { }
 
 static int
-process_do_free(struct message *m)
-{
-    /* TODO REQ: call libRMA/etc, send reply (status to response) */
-    if (m->status == MSG_REQUEST) {
-    }
-    /* TODO RESP: depends who sent request ...
-     *              i) process explicitly requested free: to MQ
-     *              ii) process died, drop this message
-     */
-    else if (m->status == MSG_RESPONSE) {
-    }
-    m->status++;
-    return 0;
-}
+msg_send_do_free(struct message *msg) { }
+
+static void
+msg_recv_do_free(struct message *msg) { }
+
 #endif
+
+static void
+__msg_req_alloc(struct message *msg)
+{
+    struct alloc_ation alloc;
+    msg->u.req.orig_rank = msg->rank;
+    BUG(0 > alloc_find(&msg->u.req, &alloc));
+    msg->u.alloc = alloc;
+    msg->status++;
+}
+
+static int
+msg_send_req_alloc(struct message *msg)
+{
+    int ret = 0;
+    BUG(!msg);
+    BUG(msg->type != MSG_REQ_ALLOC);
+
+    printd("requesting alloc from rank0\n");
+    if (myrank == 0)
+        __msg_req_alloc(msg);
+    else
+        ret = send_recv_msg(msg, 0);
+    if (ret)
+        goto out;
+
+    printd("got alloc type %d\n", msg->u.alloc.type);
+    if (msg->u.alloc.type != ALLOC_MEM_HOST) {
+        msg->type   = MSG_DO_ALLOC;
+        msg->status = MSG_REQUEST;
+        /* TODO support multiple allocs across nodes here */
+        ret = send_recv_msg(msg, msg->u.alloc.remote_rank);
+        if (ret)
+            goto out;
+    }
+    ret = 0;
+out:
+    return ret;
+}
+
+static void
+msg_recv_req_alloc(struct message *msg)
+{
+    BUG(!msg); BUG(myrank != 0);
+    printd("got msg from rank%d\n", msg->rank);
+    __msg_req_alloc(msg);
+}
+
+/* threads */
 
 /* <-- process requests from other daemons */
 static void *
@@ -227,31 +228,42 @@ inbound_thread(void *arg)
     struct sockconn *conn = (struct sockconn*)arg;
     struct message msg;
     int ret = 0;
-
     BUG(!conn);
-    printd("%s spawned\n", __func__);
-
+    printd("spawned\n");
     while (true) {
         ret = conn_get(conn, &msg, sizeof(msg));
         if (ret < 1)
             break;
-        if (msg.type == MSG_ADD_NODE)
-            alloc_add_node(&msg.u.node.config);
-        else {
+        printd("got msg %s\n", MSG_TYPE2STR(msg.type));
+        if (msg.type == MSG_ADD_NODE) {
+            alloc_add_node(msg.rank, &msg.u.node.config);
+        } else if (msg.type == MSG_REQ_ALLOC) {
+            BUG(myrank != 0);
+            msg_recv_req_alloc(&msg);
+            ret = conn_put(conn, &msg, sizeof(msg));
+            if (--ret < 0)
+                break;
+        } else if (msg.type == MSG_DO_ALLOC) {
+            /* First, send msg back to orig rank to unblock app, so it can
+             * initiate connection to us. Then listen for connections.
+             * XXX possible race condition
+             */
+            ret = conn_put(conn, &msg, sizeof(msg));
+            if (--ret < 0)
+                break;
+            msg_recv_do_alloc(&msg); /* blocks */
+        } else {
             printd("unhandled message %s\n", MSG_TYPE2STR(msg.type));
             BUG(1);
         }
     }
-
-    if (ret < 0)
-        printd("exiting with error\n");
-
+    printd("exiting %s\n", (ret < 0 ? "with error" : "normally"));
+    if (ret) BUG(1);
     return NULL;
 }
 
-/* this thread is persistent */
 static void *
-listen_thread(void *arg)
+listen_thread(void *arg) /* persistent */
 {
     struct sockconn conn;
     struct sockconn newconn, *newp;
@@ -262,7 +274,7 @@ listen_thread(void *arg)
     snprintf(port, HOST_NAME_MAX, "%d", node_file[myrank].ocm_port);
     printd("listening on port %s\n", port);
     if (conn_localbind(&conn, port))
-        goto exit;
+        goto out;
 
     while (true) {
         if ((ret = conn_accept(&conn, &newconn)))
@@ -277,54 +289,38 @@ listen_thread(void *arg)
             break;
     }
 
-exit:
-    if (ret < 0)
-        printd("exiting with error\n");
-
+out:
+    __detailed_print("oops, I shouldn't be exiting!\n");
+    BUG(1);
     return NULL;
 }
 
-/* --> process and send messages out to fulfill request */
+/* local req --> send messages out and coordinate to fulfill request */
 static void *
 request_thread(void *arg)
 {
     int ret = -1;
     struct message *msg = (struct message*)arg;
-    struct sockconn conn;
-    char port[HOST_NAME_MAX];
-
     BUG(!msg);
-    printd("%s spawned, msg %s\n", __func__, MSG_TYPE2STR(msg->type));
-
+    printd("spawned, msg %s\n", MSG_TYPE2STR(msg->type));
+    msg->rank = myrank;
     if (msg->type == MSG_ADD_NODE) {
-        if (myrank == 0) {
-            printd("adding myself\n");
-            alloc_add_node(&msg->u.node.config);
-        } else {
-            printd("forwarding to rank 0\n");
-            snprintf(port, HOST_NAME_MAX, "%d", node_file[0].ocm_port);
-            if (conn_connect(&conn, node_file[0].ip_eth, port))
-                goto out;
-            ret = conn_put(&conn, msg, sizeof(*msg));
-            if (ret < 1)
-                goto out;
-            if ((ret = conn_close(&conn)))
-                goto out;
-        }
-    }
-
-    else {
-        printd("unhandled message %s\n", MSG_TYPE2STR(msg->type));
+        ret = msg_send_add_node(msg);
+    } else if (msg->type == MSG_REQ_ALLOC) {
+        ret = msg_send_req_alloc(msg);
+        msg->type = MSG_RELEASE_APP;
+        send_pid(msg, msg->pid);
+    } else {
+        __detailed_print("unhandled message %s\n", MSG_TYPE2STR(msg->type));
         BUG(1);
     }
-
-    ret = 0;
-
+    if (ret)
+        __detailed_print("error sending message %s\n",
+                MSG_TYPE2STR(msg->type));
 out:
-    if (conn_is_connected(&conn))
-        conn_close(&conn);
     free(msg);
-    printd("exiting%s\n", (ret < 0 ? " with error" : " normally"));
+    printd("exiting %s\n", (ret < 0 ? "with error" : "normally"));
+    if (ret) BUG(1);
     pthread_exit(NULL);
 }
 
@@ -361,16 +357,19 @@ mem_fin(void)
 int
 mem_new_request(struct message *m)
 {
+    int ret = -1;
     struct message *new_msg = malloc(sizeof(*new_msg));
     pthread_t tid;
     if (!m || !new_msg)
-        return -1;
+        goto out;
     *new_msg = *m;
     if (pthread_create(&tid, NULL, request_thread, (void*)new_msg))
-        return -1;
+        goto out;
     if (pthread_detach(tid))
-        return -1;
-    return 0;
+        goto out;
+    ret = 0;
+out:
+    return ret;
 }
 
 void

@@ -55,10 +55,10 @@ process_msg(struct message *msg)
 {
     struct app *app = NULL;
 
-    switch (msg->type) {
+    printd("app %d --> msg %s\n",
+            msg->pid, MSG_TYPE2STR(msg->type));
 
-    case MSG_CONNECT:
-    {
+    if (msg->type == MSG_CONNECT) {
         printd("app %d connecting\n", msg->pid);
         app = calloc(1, sizeof(*app));
         ABORT2(!app);
@@ -77,12 +77,9 @@ process_msg(struct message *msg)
         msg->type = MSG_CONNECT_CONFIRM;
         msg->status = MSG_RESPONSE;
         pmsg_send(app->pid, msg);
-
     }
-    break;
 
-    case MSG_DISCONNECT:
-    {
+    else if (msg->type == MSG_DISCONNECT) {
         printd("app %d departing\n", msg->pid);
         lock_apps();
         for_each_app(app, apps)
@@ -96,16 +93,9 @@ process_msg(struct message *msg)
         pmsg_detach(app->pid);
         free(app);
     }
-    break;
 
     /* all other messages */
-    default:
-    {
-        mem_new_request(msg);
-    }
-    break;
-
-    }
+    else mem_new_request(msg);
 }
 
 static void *
@@ -153,8 +143,6 @@ notify_rank0(void)
     msg.status  = MSG_NO_STATUS;    /* not used */
     msg.pid     = -1;               /* not used */
     memset(&msg.u.node.config, 0, sizeof(msg.u.node.config)); /* TODO */
-    if (gethostname(msg.u.node.config.hostname, HOST_NAME_MAX))
-        return -1;
     if (ib_nic_ip(0, msg.u.node.config.ib_ip, HOST_NAME_MAX))
         return -1;
     if (mem_new_request(&msg))
@@ -179,18 +167,18 @@ int main(int argc, char *argv[])
 
     q_init(&outbox, sizeof(struct message));
 
-    if (mem_init(argv[1]) < 0)
+    if (mem_init(argv[1]))
         return -1;
 
     /* <-- mem sends msgs to apps via this queue */
     mem_set_outbox(&outbox);
 
     pmsg_cleanup();
-    if (pmsg_init(sizeof(struct message)) < 0)
+    if (pmsg_init(sizeof(struct message)))
         return -1;
-    if (pmsg_open(PMSG_DAEMON_PID) < 0)
+    if (pmsg_open(PMSG_DAEMON_PID))
         return -1;
-    if (launch_poll_thread() < 0)
+    if (launch_poll_thread())
         return -1;
 
     if (notify_rank0())

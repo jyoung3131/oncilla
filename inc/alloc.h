@@ -46,7 +46,6 @@ struct alloc_request
 
 struct alloc_node_config
 {
-    char hostname[HOST_NAME_MAX];
     char ib_ip[HOST_NAME_MAX];
     size_t ram; /* host memory, bytes */
     size_t gpu_mem[ALLOC_MAX_GPUS]; /* same but for the GPUs */
@@ -91,7 +90,7 @@ enum alloc_do_type
 
 /* Function prototypes */
 
-int alloc_add_node(struct alloc_node_config *c/*in*/);
+int alloc_add_node(int rank, struct alloc_node_config *config/*in*/);
 int alloc_find(struct alloc_request *r/*in*/, struct alloc_ation *a/*out*/);
 int alloc_ate(struct alloc_ation *a/*in*/);
 
