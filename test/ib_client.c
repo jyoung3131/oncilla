@@ -3,9 +3,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <debug.h>
+#include <time.h>
 
 #include <io/rdma.h>
 #include "../src/rdma.h"
+#include <util/timer.h>
 #include <math.h>
 
 static char *serverIP = NULL;
@@ -20,6 +22,7 @@ static ib_t setup(struct ib_params *p)
     if (!(ib = ib_new(p)))
         return (ib_t)NULL;
 
+    //Don't time here due to blocking statements
     if (ib_connect(ib, false/*is client*/))
         return (ib_t)NULL;
 
@@ -31,9 +34,18 @@ static int teardown(ib_t ib)
 {
     int ret = 0;
 
+    TIMER_DECLARE1(ib_disconnect_timer);
+    TIMER_START(ib_disconnect_timer);
+
     if (ib_disconnect(ib, false/*is client*/))
       ret = 1;
 
+    #ifdef TIMING
+    uint64_t ib_teardown_ns = 0;
+    TIMER_END(ib_disconnect_timer, ib_teardown_ns);
+    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
+    #endif
+   
     //Free the IB structure
     if(ib_free(ib))
       ret = -1;
@@ -41,7 +53,7 @@ static int teardown(ib_t ib)
     return ret;
 }
 
-/* Does simple allocation test */
+/* Does simple allocation test - for testing setup times*/
 static int alloc_test(long long unsigned int size_B)
 {
     ib_t ib;
@@ -74,6 +86,14 @@ static int alloc_test(long long unsigned int size_B)
 /* write/read to/from remote memory timing test. */
 static int read_write_test()
 {
+    TIMER_DECLARE1(ib_read_timer);
+    TIMER_DECLARE1(ib_write_timer);
+    #ifdef TIMING
+    uint64_t ib_write_time_ns = 0;
+    uint64_t ib_read_time_ns = 0;
+    #endif
+    
+
     ib_t ib;
     struct ib_params params;
     char *buf = NULL;
@@ -103,23 +123,41 @@ static int read_write_test()
 
   while(size_B<=pow(2,30)){
 	len=size_B;
+	#ifdef TIMING
+	printf("------- %llu bytes -------\n", size_B);
+	#endif
  
+	#ifdef TIMING
+	TIMER_START(ib_write_timer);
 	if(ib_write(ib, 0, len)||ib_poll(ib))
 	{
 	    printf("write failed\n");
 	    return -1;
 	}
+	TIMER_END(ib_write_timer, ib_write_time_ns);
+	TIMER_CLEAR(ib_write_timer);
+	printf("[W] time to write %llu bytes: %lu \n", size_B, ib_write_time_ns);     
+	#endif 
 	memset(buf, 0, len);
     	size_B*=2;
 	}
 	// read back and wait for completion
       while(size_B2<=pow(2,30)){
+    	#ifdef TIMING
+	printf("------- %llu bytes -------\n", size_B2);
+	#endif
 	len=size_B2;
+	#ifdef TIMING
+	TIMER_START(ib_read_timer);
 	if(ib_read(ib, 0, len)||ib_poll(ib))
 	{
 	    printf("read failed\n");
 	    return -1;
 	}
+	TIMER_END(ib_read_timer, ib_read_time_ns);
+	TIMER_CLEAR(ib_read_timer);
+	printf("[R] time to read %llu bytes: %lu \n", len, ib_read_time_ns);
+	#endif
 	
 	size_B2*=2;
 	}

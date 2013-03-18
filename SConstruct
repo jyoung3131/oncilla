@@ -18,6 +18,7 @@ Help("""
       Type: 'scons ' to build the optimized version,
             'scons -c' to clean the build directory,
             'scons debug=1' to build the debug version,
+            'scons timing=1' to enable timers for the optimized build,
             'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively.
       """)
 
@@ -35,6 +36,9 @@ libflags = []
 #src/rdma.c:107 throws an aliasing error when compiled in the optimized case
 #At some point we need to check on this...
 #ccflags.extend(['-fno-strict-aliasing'])
+
+if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
+   ccflags.extend(['-DTIMING'])
 
 if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])

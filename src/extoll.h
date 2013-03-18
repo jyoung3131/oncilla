@@ -13,8 +13,10 @@
 #include <sys/types.h>
 
 #include <fcntl.h>                                             
+#include <time.h>            
 #include <sys/mman.h>                                           
 #include <sys/ioctl.h>                                           
+#include <sys/time.h>                                             
 #include "/extoll2/include/pmap.h"
 #include "/extoll2/include/rma2.h"
 

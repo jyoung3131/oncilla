@@ -31,8 +31,17 @@ static int teardown(extoll_t ex)
 {
   int ret = 0;
 
+  TIMER_DECLARE1(ex_disconnect_timer);
+  TIMER_START(ex_disconnect_timer);
+
   if (extoll_disconnect(ex, true/*is server*/))
     ret = -1;
+
+#ifdef TIMING
+  uint64_t extoll_teardown_ns = 0;
+  TIMER_END(ex_disconnect_timer, extoll_teardown_ns);
+  printf("[DISCONNECT] Time for extoll_disconnect: %lu ns\n", extoll_teardown_ns);
+#endif
 
   //Free the IB structure
   if(extoll_free(ex))

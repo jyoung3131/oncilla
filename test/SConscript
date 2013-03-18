@@ -19,6 +19,9 @@ libpath.extend(['../lib'])
 
 libs = ['ocm', 'rt', 'm']
 
+if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
+      ccflags.extend(['-DTIMING'])
+
 if int(ARGUMENTS.get('debug', 0)): # 
     ccflags.append(['-ggdb', '-O0'])
     libs.append('mcheck')
