@@ -139,6 +139,32 @@ extoll_connect(extoll_t ex, bool is_server)
     return err;
 }
 
+/* client function: pull data fom server */
+int
+extoll_read(extoll_t ex, size_t offset, size_t len)
+{
+    if (!ex)
+        return -1;
+    if ((offset + len) > ex->buf_len) {
+        printd("error: would read past end of remote buffer\n");
+        return -1;
+    }
+    return extoll_transfer(ex, 0, offset, len);
+}
+
+/* client function: push data to server */
+int
+extoll_write(extoll_t ex, size_t offset, size_t len)
+{
+    if (!ex || len == 0)
+        return -1;
+    if ((offset + len) > ib->ibv.buf_len) {
+        printd("error: would write past end of remote buffer\n");
+        return -1;
+    }
+    return post_send(ib, IBV_WR_RDMA_WRITE, offset, len);
+}
+
 //ib_reg_mr(ib_t ex, void *buf, size_t len)
 
 /* client function: pull data fom server */
