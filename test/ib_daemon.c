@@ -4,7 +4,6 @@
 #include <stdbool.h>
 
 #include <io/rdma.h>
-#include <util/timer.h>
 #include <math.h>
 #include "../src/rdma.h"
 
@@ -18,8 +17,6 @@ static ib_t setup(struct ib_params *p)
 	if (!(ib = ib_new(p)))
 		return (ib_t)NULL;
 
-  //We don't time this function because it has several blocking
-  //statements within which provide a false picture of timing.
   if (ib_connect(ib, true/*is server*/))
 	return (ib_t)NULL;
 
@@ -31,17 +28,8 @@ static int teardown(ib_t ib)
 {
   int ret = 0;
   
-  uint64_t ib_teardown_ns = 0;
-  TIMER_DECLARE1(ib_disconnect_timer);
-  TIMER_START(ib_disconnect_timer);
-
 	if (ib_disconnect(ib, true/*is server*/))
 		ret = -1;
-
-  TIMER_END(ib_disconnect_timer, ib_teardown_ns);
-  printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
-  //Destroy the timer once we are done with it
-  //TIMER_DESTROY(ib_disconnect_timer);
 
   //Free the IB structure
   if(ib_free(ib))
@@ -79,7 +67,7 @@ static int alloc_test(long long unsigned int size_B)
 
 }
 
-/* read / write to/from memory timing test */
+/* read / write to/from memory */
 static int read_write_test(void){
 
 	ib_t ib;
