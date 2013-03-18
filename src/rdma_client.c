@@ -57,7 +57,7 @@ ib_client_connect(struct ib_alloc *ib)
     struct addrinfo *res, *t, hints;
     char *service;
 
-    memset(&hints, 0, sizeof(&hints));
+    memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = 0;

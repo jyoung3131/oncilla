@@ -6,10 +6,9 @@ import os
 import commands
 import sys
 
-gcc = 'gcc'
+gcc = 'clang'
 
-mpi_path = os.getenv('MPI_PATH')
-libpath = [str(mpi_path) + '/lib']
+libpath = []
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
@@ -18,19 +17,11 @@ ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
 cpath = [os.getcwd() + '/../inc']
 libpath.extend(['../lib'])
 
-libs = ['ocm', 'rt','mpi']
+libs = ['ocm', 'rt', 'm']
 
-
-if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
-      ccflags.extend(['-DTIMING'])
-
-if int(ARGUMENTS.get('filter', 0)): # prefix gccfilter to assist with compilation
-    gcc = gccfilter + gcc
-
-if int(ARGUMENTS.get('dbg', 0)): # 
+if int(ARGUMENTS.get('debug', 0)): # 
     ccflags.append(['-ggdb', '-O0'])
-elif int(ARGUMENTS.get('mpidbg', 0)): # 
-    ccflags.append(['-ggdb', '-O0'])
+    libs.append('mcheck')
 else:
     ccflags.extend(['-O3'])
 

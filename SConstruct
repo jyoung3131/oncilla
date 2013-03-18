@@ -17,21 +17,16 @@ import sys
 Help("""
       Type: 'scons ' to build the optimized version,
             'scons -c' to clean the build directory,
-            'scons dbg=1' to build the debug version,
-            'scons mpidbg=1' to build the MPI debug version (OCM debugging),
-            'scons timing=1' to enable timers for the optimized build,
+            'scons debug=1' to build the debug version,
             'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively.
       """)
 
 # C configuration environment
-mpi_path = os.getenv('MPI_PATH')
-mpi_include = str(mpi_path) + 'include'
-libpath = [str(mpi_path) + 'lib']
-libs = ['mpi', 'rt']
-cpath = [os.getcwd() + '/inc', mpi_include]
+libpath = []
+libs = ['rt']
+cpath = [os.getcwd() + '/inc']
 
-gcc = str(mpi_path) + '/bin/mpicc'
-gccfilter = './gccfilter -c '
+gcc = 'clang'
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
@@ -41,18 +36,13 @@ libflags = []
 #At some point we need to check on this...
 #ccflags.extend(['-fno-strict-aliasing'])
 
-if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
-   ccflags.extend(['-DTIMING'])
-
-if int(ARGUMENTS.get('dbg', 0)): # set debug flags (no MPI debugging here)
+if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])
-   libflags.extend(['-ggdb','-O0'])
-elif int(ARGUMENTS.get('mpidbg', 0)): # set debug flags and set MPIDEBUG preprocessor flag
-   ccflags.extend(['-ggdb','-O0', '-DMPI_DEBUG'])
    libflags.extend(['-ggdb','-O0'])
 else:
    ccflags.extend(['-O3'])
    ccflags.extend(['-fno-strict-aliasing'])
+   libs.append('mcheck')
 
 #Detect whether the user wants to compile with IB, EXTOLL, or all networks
 #available

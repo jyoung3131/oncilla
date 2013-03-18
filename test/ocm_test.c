@@ -25,14 +25,15 @@ int main(void)
         printf("ocm_localbuf failed\n");
         goto fail;
     }
+    printf("local buffer size %lu @ %p\n", buf_len, buf);
 
-    if (ocm_remote_sz(a, &remote_len)) {
-        printf("ocm_remote_sz failed\n");
-        goto fail;
+    if (ocm_is_remote(a)) {
+        if (!ocm_remote_sz(a, &remote_len)) {
+            printf("alloc is remote; size = %lu\n", remote_len);
+        } else {
+            printf("alloc is local\n");
+        }
     }
-
-    printf("OCM gave %lu remote bytes & local buf @ %p with %lu bytes\n",
-            remote_len, buf, buf_len);
 
 #if 0
     if (ocm_free(a) < 0) {

@@ -8,6 +8,7 @@
  */
 
 /* System includes */
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,6 @@
 
 /* Project includes */
 #include <debug.h>
-#include <io/nw.h>
 #include <mem.h>
 #include <pmsg.h>
 
@@ -55,10 +55,10 @@ process_msg(struct message *msg)
 {
     struct app *app = NULL;
 
-    switch (msg->type) {
+    printd("app %d --> msg %s\n",
+            msg->pid, MSG_TYPE2STR(msg->type));
 
-    case MSG_CONNECT:
-    {
+    if (msg->type == MSG_CONNECT) {
         printd("app %d connecting\n", msg->pid);
         app = calloc(1, sizeof(*app));
         ABORT2(!app);
@@ -77,12 +77,9 @@ process_msg(struct message *msg)
         msg->type = MSG_CONNECT_CONFIRM;
         msg->status = MSG_RESPONSE;
         pmsg_send(app->pid, msg);
-
     }
-    break;
 
-    case MSG_DISCONNECT:
-    {
+    else if (msg->type == MSG_DISCONNECT) {
         printd("app %d departing\n", msg->pid);
         lock_apps();
         for_each_app(app, apps)
@@ -96,17 +93,9 @@ process_msg(struct message *msg)
         pmsg_detach(app->pid);
         free(app);
     }
-    break;
 
     /* all other messages */
-    default:
-    {
-        msg->rank = nw_get_rank();
-        mem_add_msg(msg);
-    }
-    break;
-
-    }
+    else mem_new_request(msg);
 }
 
 static void *
@@ -117,10 +106,12 @@ poll_mailbox(void *arg)
     printd("mailbox poller alive\n");
 
     while (true) {
+        /* <-- send out */
         while (!q_empty(&outbox)) {
             q_pop(&outbox, &msg);
             pmsg_send(msg.pid, &msg);
         }
+        /* --> pull in for processing */
         while (pmsg_pending() > 0) {
             if (pmsg_recv(&msg, false) < 0)
                 pthread_exit(NULL);
@@ -151,68 +142,49 @@ notify_rank0(void)
     msg.type    = MSG_ADD_NODE;
     msg.status  = MSG_NO_STATUS;    /* not used */
     msg.pid     = -1;               /* not used */
-    msg.rank    = nw_get_rank();
     memset(&msg.u.node.config, 0, sizeof(msg.u.node.config)); /* TODO */
-    if (gethostname(msg.u.node.config.hostname, HOST_NAME_MAX))
-        return -1;
     #ifdef INFINIBAND
     if (ib_nic_ip(0, msg.u.node.config.ib_ip, HOST_NAME_MAX))
         return -1;
     #endif
-    if (mem_add_msg(&msg))
+    if (mem_new_request(&msg))
         return -1;
     return 0;
+}
+
+static void
+usage(int argc, char *argv[])
+{
+    fprintf(stderr, "Usage: %s nodefile\n", *argv);
 }
 
 int main(int argc, char *argv[])
 {
     printd("Verbose printing enabled\n");
 
-    q_init(&outbox, sizeof(struct message));
-
-    if (mem_init() < 0) {
-        fprintf(stderr, "error initializing mem\n");
+    if (argc != 2) {
+        usage(argc, argv);
         return -1;
     }
 
-   //To debug Oncilla using GDB pass the flag "mpidbg=1" to the SConstruct when building
-   #ifdef MPI_DEBUG
-   //Code used to attach gdb debugger at the beginning of the main function
-   int mpidbg = 0;
-   char hostname[256];
-   gethostname(hostname, sizeof(hostname));
-   printf("PID %d on %s ready for attach\n", getpid(), hostname);
-   fflush(stdout);
-   while (0 == mpidbg)
-        sleep(5);
-   #endif
+    q_init(&outbox, sizeof(struct message));
 
-    /* mem will append msgs to apps into this queue */
+    if (mem_init(argv[1]))
+        return -1;
+
+    /* <-- mem sends msgs to apps via this queue */
     mem_set_outbox(&outbox);
 
     pmsg_cleanup();
-    if (pmsg_init(sizeof(struct message)) < 0) {
-        fprintf(stderr, "error initializing pmsg\n");
+    if (pmsg_init(sizeof(struct message)))
         return -1;
-    }
-    if (pmsg_open(PMSG_DAEMON_PID) < 0) {
-        fprintf(stderr, "error opening recv mailbox\n");
+    if (pmsg_open(PMSG_DAEMON_PID))
         return -1;
-    }
-    if (launch_poll_thread() < 0) {
-        fprintf(stderr, "error launching poll thread\n");
+    if (launch_poll_thread())
         return -1;
-    }
 
-    if (mem_launch() < 0) {
-        fprintf(stderr, "error launching\n");
+    if (notify_rank0())
         return -1;
-    }
-
-    if (notify_rank0()) {
-        printd("notify rank0 failed\n");
-        return -1;
-    }
 
     /* TODO Need to wait on signal or something instead of sleeping */
     sleep(3600);

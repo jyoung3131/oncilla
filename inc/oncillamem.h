@@ -9,6 +9,7 @@
 
 /* System includes */
 #include <stdlib.h>
+#include <stdbool.h>
 
 /* Other project includes */
 
@@ -42,6 +43,8 @@ int ocm_free(ocm_alloc_t a);
 
 /* get pointer to local buffer */
 int ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len);
+
+bool ocm_is_remote(ocm_alloc_t a);
 
 /* get size of remote buffer */
 int ocm_remote_sz(ocm_alloc_t a, size_t *len);

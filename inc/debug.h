@@ -7,11 +7,15 @@
 #ifndef DEBUG_H_
 #define DEBUG_H_
 
+/* System includes */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+
+/* Project includes */
+#include <util/compiler.h>
 
 #define __DEBUG_ENABLED     (getenv("OCM_VERBOSE"))
 
@@ -25,7 +29,7 @@
  */
 #define BUG(expr)                       \
     do {                                \
-        if (expr) {                     \
+        if (unlikely(expr)) {           \
             __detailed_print("BUG\n");  \
             assert(0);                  \
         }                               \
@@ -33,7 +37,7 @@
 
 #define ABORT2(expr)                        \
     do {                                    \
-        if (expr) {                         \
+        if (unlikely(expr)) {                         \
             __detailed_print("ABORT\n");    \
             assert(0);                      \
         }                                   \

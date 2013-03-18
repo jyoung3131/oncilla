@@ -13,6 +13,7 @@
 /* Other project includes */
 
 /* Project includes */
+#include <msg.h>
 #include <util/queue.h>
 
 /* Defines */
@@ -25,10 +26,10 @@
 
 /* Function prototypes */
 
-int mem_init(void);
-int mem_launch(void);
-int mem_add_msg(struct message *m);
+int mem_init(const char *nodefile_path);
+int mem_new_request(struct message *m);
 void mem_fin(void);
 void mem_set_outbox(struct queue *outbox);
+int mem_get_rank(void);
 
 #endif  /* __MEM__ */
