@@ -24,12 +24,21 @@
 
 /* Directory includes */
 #include "extoll.h"
+#include "extoll_noti.h"
 
 /* Internal definitions */
 
 /* Internal state */
 
 /* Private functions */
+static void sighandler(int sig)
+{
+    printf("Received signal %d - breaking out of the loop\n",sig);
+    noti_loop = 0;
+
+    //Jump back to src/extoll.c:extoll_notification initiate EXTOLL teardown
+    longjmp(jmp_noti_buf,1);
+}
 
 /* Public functions */
 
@@ -104,11 +113,17 @@ void extoll_server_notification(struct extoll_alloc *ex)
 {
   RMA2_ERROR rc;
 
-  printf("Server is waiting for notifications - enter Ctrl-D to exit\n");
-  char d;
-  while ((d=getchar())!=EOF)
+  /*Catch the Ctrl-\ key combination and jump to the teardown code*/
+  signal(SIGQUIT, &sighandler);
+
+  noti_loop = 1;
+
+  printf("Server is waiting for notifications - enter Ctrl-\\ to exit\n");
+  while (noti_loop)
   {
     rc=rma2_noti_get_block(ex->rma.port, &(ex->rma.notification[0]));
+    //nonblocking version
+    //rc=rma2_noti_probe(rma2Obj->port, &(rma2Obj->notification));
     if (rc != RMA2_SUCCESS)
     {
       continue;
