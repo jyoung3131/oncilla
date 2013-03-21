@@ -93,6 +93,7 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
     
     #ifdef EXTOLL
     else if (req->type == ALLOC_MEM_RMA) {
+        node = &node_file[alloc->remote_rank];
         BUG(1); /* TODO */
     }
     #endif

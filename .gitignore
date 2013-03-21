@@ -5,9 +5,11 @@
 *.so
 *.os
 *.cmd
+config.log
 cscope.out
 bin/oncillamem
 .sconsign.dblite
+.sconf*
 test/ocm_test
 test/ib_client
 test/ib_daemon
