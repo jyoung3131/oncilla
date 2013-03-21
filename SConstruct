@@ -46,14 +46,14 @@ if not env.GetOption('clean'):
     print 'EXTOLL install not found\n'
     envcompilepath = 'ib'
 
-  if not (envcompilepath == 'extoll') or  (envcompilepath == 'ib'):
+  if not (envcompilepath == 'extoll') and not (envcompilepath == 'ib'):
     print 'EXTOLL and IB install are available'
     envcompilepath = 'All'
   else:
     print '%s path(s) selected\n\n' % envcompilepath
 
 print 'Testing to see if clang is installed'
-if run('/usr/local/bin/clang', env):
+if run('which clang', env):
   print 'clang not found - using gcc\n\n'
   gcc = 'gcc'
 env = conf.Finish()
