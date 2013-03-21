@@ -6,7 +6,11 @@ import os
 import commands
 import sys
 
-gcc = 'clang'
+#Import all exported variables from SConstruct including 
+#1) gcc or clang
+Import('*')
+
+#gcc = 'clang'
 
 libpath = []
 
@@ -25,14 +29,11 @@ if int(ARGUMENTS.get('debug', 0)): #
 else:
     ccflags.extend(['-O3'])
 
-if int(ARGUMENTS.get('ib', 0)): # specify IB or EXTOLL compilation path
-    compilepath = 'ib'
+if compilepath == 'ib':
     ccflags.extend(['-DINFINIBAND'])
-elif int(ARGUMENTS.get('extoll', 0)):
-    compilepath = 'extoll'
+elif compilepath == 'extoll':
     ccflags.extend(['-DEXTOLL'])
 else:
-    compilepath = 'all'
     ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
 
 #Add RMA libs if EXTOLL network is supported

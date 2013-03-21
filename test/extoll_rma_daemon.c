@@ -4,7 +4,6 @@
 #include <stdbool.h>
 
 #include <io/extoll.h>
-#include <util/timer.h>
 #include <math.h>
 #include "../src/extoll.h"
 

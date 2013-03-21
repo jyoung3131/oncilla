@@ -41,6 +41,11 @@
 static LIST_HEAD(extoll_allocs);
 
 /* Private functions */
+int extoll_transfer(extoll_t ex, size_t read_write, size_t offset, size_t len)
+{
+  return 0;
+}
+
 
 /* Public functions */
 
@@ -145,7 +150,7 @@ extoll_read(extoll_t ex, size_t offset, size_t len)
 {
     if (!ex)
         return -1;
-    if ((offset + len) > ex->buf_len) {
+    if ((offset + len) > ex->params.buf_len) {
         printd("error: would read past end of remote buffer\n");
         return -1;
     }
@@ -158,11 +163,11 @@ extoll_write(extoll_t ex, size_t offset, size_t len)
 {
     if (!ex || len == 0)
         return -1;
-    if ((offset + len) > ib->ibv.buf_len) {
+    if ((offset + len) > ex->params.buf_len) {
         printd("error: would write past end of remote buffer\n");
         return -1;
     }
-    return post_send(ib, IBV_WR_RDMA_WRITE, offset, len);
+    return extoll_transfer(ex, 1, offset, len);;
 }
 
 //ib_reg_mr(ib_t ex, void *buf, size_t len)

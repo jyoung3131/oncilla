@@ -29,7 +29,7 @@
  */
 #define BUG(expr)                       \
     do {                                \
-        if (unlikely(expr)) {           \
+        if (dbg_unlikely(expr)) {           \
             __detailed_print("BUG\n");  \
             assert(0);                  \
         }                               \
@@ -37,7 +37,7 @@
 
 #define ABORT2(expr)                        \
     do {                                    \
-        if (unlikely(expr)) {                         \
+        if (dbg_unlikely(expr)) {                         \
             __detailed_print("ABORT\n");    \
             assert(0);                      \
         }                                   \

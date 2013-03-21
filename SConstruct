@@ -18,15 +18,50 @@ Help("""
       Type: 'scons ' to build the optimized version,
             'scons -c' to clean the build directory,
             'scons debug=1' to build the debug version,
-            'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively.
+            'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively
       """)
+
+gcc = 'clang'
+envcompilepath = ''
+
+#Use this function to check and see if a particular application is installed
+def run(cmd, env):
+  """Run a Unix command and return the exit code."""
+  res = os.system(cmd)
+  if (os.WIFEXITED(res)):
+    code = os.WEXITSTATUS(res)
+    return code
+  # Assumes that if a process doesn't call exit, it was successful
+  return 0
+
+env = Environment()
+conf = Configure(env)
+if not env.GetOption('clean'):
+  print 'Testing to see if InfiniBand is installed'
+  if run('/usr/sbin/ibstat', env):
+    print 'IB not found\n'
+    envcompilepath = 'extoll'
+
+  if not conf.CheckCHeader('/extoll2/include/rma2.h'):
+    print 'EXTOLL install not found\n'
+    envcompilepath = 'ib'
+
+  if not (envcompilepath == 'extoll') or  (envcompilepath == 'ib'):
+    print 'EXTOLL and IB install are available'
+    envcompilepath = 'All'
+  else:
+    print '%s path(s) selected\n\n' % envcompilepath
+
+print 'Testing to see if clang is installed'
+if run('/usr/local/bin/clang', env):
+  print 'clang not found - using gcc\n\n'
+  gcc = 'gcc'
+env = conf.Finish()
 
 # C configuration environment
 libpath = []
 libs = ['rt']
 cpath = [os.getcwd() + '/inc']
-
-gcc = 'clang'
 
 ccflags = ['-Wall', '-Wextra', '-Werror', '-Winline']
 ccflags.extend(['-Wno-unused-parameter', '-Wno-unused-function'])
@@ -46,15 +81,24 @@ else:
 
 #Detect whether the user wants to compile with IB, EXTOLL, or all networks
 #available
-if int(ARGUMENTS.get('ib', 0)): # specify IB or EXTOLL compilation path
+#Arguments allow the user to override detected compile options or default compilation
+#will compile the EXTOLL and IB code if it is supported
+if int(ARGUMENTS.get('ib', 0)):
    compilepath = 'ib'
    ccflags.extend(['-DINFINIBAND'])
 elif int(ARGUMENTS.get('extoll', 0)):
    compilepath = 'extoll'
    ccflags.extend(['-DEXTOLL'])
 else:
-   compilepath = 'all'
-   ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
+   if envcompilepath == 'ib':
+      compilepath = 'ib'
+      ccflags.extend(['-DINFINIBAND'])
+   elif envcompilepath == 'extoll':
+      compilepath = 'extoll'
+      ccflags.extend(['-DEXTOLL'])
+   else:
+      compilepath = 'all'
+      ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
 
 #Add IB libs if IB network is supported
 if compilepath == 'extoll':
@@ -108,4 +152,9 @@ if compilepath != 'ib':
   libfiles.append('src/extoll_server.c')
   libfiles.append('src/extoll_client.c')
 solib = env.SharedLibrary('lib/libocm.so', libfiles)
+
+#Export variables set in this file so they can be imported into the SConscript
+exp_env = Environment()
+Export('env', 'gcc','compilepath')
+#Then call SConscript 
 SConscript(['test/SConscript'])

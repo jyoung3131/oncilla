@@ -222,7 +222,7 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
     else if (msg.u.alloc.type == ALLOC_MEM_RMA) {
         printd("adding new lib_alloc to list\n");
         lock_allocs();
-        list_add(&lib_alloc->link, &allocs);
+        list_add(&alloc->link, &allocs);
         unlock_allocs();
 
         BUG(1); /* TODO path not implemented... */
