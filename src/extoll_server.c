@@ -29,16 +29,14 @@
 /* Internal state */
 
 /* Private functions */
-
-/*void sighandler(int sig)
-{ 
+static void sighandler(int sig)
+{
     printf("Received signal %d - breaking out of the loop\n",sig);
     noti_loop = 0;
 
     //Jump back to src/extoll.c:extoll_notification initiate EXTOLL teardown
     longjmp(jmp_noti_buf,1);
-}*/
-
+}
 
 /* Public functions */
 
@@ -93,6 +91,8 @@ void extoll_server_notification(struct extoll_alloc *ex)
 
   /*Catch the Ctrl-\ key combination and jump to the teardown code*/
   signal(SIGQUIT, &sighandler);
+
+  noti_loop = 1;
 
   printf("Server is waiting for notifications - enter Ctrl-\\ to exit\n");
   while (noti_loop)
