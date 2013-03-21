@@ -31,6 +31,7 @@
 
 /* Directory includes */
 #include "extoll.h"
+#include "extoll_noti.h"
 
 /* Globals */
 
@@ -39,6 +40,8 @@
 /* Internal state */
 
 static LIST_HEAD(extoll_allocs);
+//Run the notification only once
+static int run_once;
 
 /* Private functions */
 int extoll_transfer(extoll_t ex, size_t read_write, size_t offset, size_t len)
@@ -105,7 +108,15 @@ extoll_free(extoll_t ex)
 
 void extoll_notification(extoll_t ex)
 {
-  extoll_server_notification((struct extoll_alloc*)ex);
+  //Store this location so we can jump back here if needed to
+  //break out of the notification call
+  setjmp(jmp_noti_buf);
+  //Once we jump back the notification call will not be run the second time
+  if(!run_once)
+  {
+    run_once = 1;
+    extoll_server_notification((struct extoll_alloc*)ex);
+  }
 }
 
 //Close down the EXTOLL server and client applications

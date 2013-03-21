@@ -10,6 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+//Used to handle a special case where the notification blocking
+//statement cannot be broken out of
+#include <setjmp.h>
+//Create a signal handler to break out of notification
+#include <signal.h>
 #include <sys/types.h>
 
 #include <fcntl.h>                                             
@@ -19,7 +24,6 @@
 #include "/extoll2/include/rma2.h"
 
 #include <util/list.h>
-
 
 struct __rma_t {
   //An RMA port is a pointer to an RMA_Endpoint struct that contains

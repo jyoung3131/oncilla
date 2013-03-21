@@ -75,7 +75,7 @@ if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])
    libflags.extend(['-ggdb','-O0'])
 else:
-   ccflags.extend(['-O3'])
+   ccflags.extend(['-O2'])
    ccflags.extend(['-fno-strict-aliasing'])
    libs.append('mcheck')
 

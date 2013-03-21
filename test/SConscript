@@ -27,7 +27,7 @@ if int(ARGUMENTS.get('debug', 0)): #
     ccflags.append(['-ggdb', '-O0'])
     libs.append('mcheck')
 else:
-    ccflags.extend(['-O3'])
+    ccflags.extend(['-O2'])
 
 if compilepath == 'ib':
     ccflags.extend(['-DINFINIBAND'])
