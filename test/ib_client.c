@@ -72,7 +72,7 @@ static int alloc_test(long long unsigned int size_B)
 }
 
 /* write/read to/from remote memory timing test. */
-static int read_write_test()
+static int read_write_bw_test()
 {
     ib_t ib;
     struct ib_params params;
@@ -246,7 +246,7 @@ int main(int argc, char *argv[])
     if (argc != 4) {
 usage:
         fprintf(stderr, "Usage: %s <server_ip=10.0.0.[1=ifrit or 2=shiva]> <test_num> <alloc_size_MB>\n"
-                "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write \n"
+                "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write BW test\n"
                 "\talloc_size: can be specified in any positive decimal format\n", argv[0]);
         return -1;
     }
@@ -288,12 +288,12 @@ usage:
             printf("pass: alloc_test\n");
         break;
     case 3:
-	printf("Running read/write test with buffer size beginning with %4f MB and %lu B\n", reg_size_MB, reg_size_B);
-	if(read_write_test()){
-	    fprintf(stderr, "FAIL: read/write test\n");
+	printf("Running read/write BW test\n");
+	if(read_write_bw_test()){
+	    fprintf(stderr, "FAIL: read/write BW test\n");
 	    return -1;
 	} else
-	    printf("pass: read/write test\n");
+	    printf("pass: read/write BW test\n");
 	break;
     default:
         goto usage; /* >:) */

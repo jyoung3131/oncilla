@@ -97,16 +97,16 @@ void extoll_server_notification(struct extoll_alloc *ex)
   printf("Server is waiting for notifications - enter Ctrl-\\ to exit\n");
   while (noti_loop)
   {
-    rc=rma2_noti_get_block(ex->rma.port, &(ex->rma.notification[0]));
+    rc=rma2_noti_get_block(ex->rma.port, &(ex->rma.notification));
     //nonblocking version
     //rc=rma2_noti_probe(rma2Obj->port, &(rma2Obj->notification));
     if (rc != RMA2_SUCCESS)
     {
       continue;
     }
-    rma2_noti_dump(ex->rma.notification[0]);
-    rma2_noti_free(ex->rma.port,ex->rma.notification[0]);
-    printf("\n\nContent !=0:\n\n");
+    rma2_noti_dump(ex->rma.notification);
+    rma2_noti_free(ex->rma.port,ex->rma.notification);
+    printd("\n\nContent !=0:\n\n");
   }
 
 }
@@ -120,7 +120,8 @@ int extoll_server_disconnect(struct extoll_alloc *ex)
   //never performed rma2_connect
 
   //Unregister the pages when the program is stopped
-  printf("Unregister pages\n");
+  //This should also free the memory
+  printd("Unregister pages\n");
     rc=rma2_unregister(ex->rma.port, ex->rma.region);
 
   if (rc!=RMA2_SUCCESS) 
@@ -130,7 +131,7 @@ int extoll_server_disconnect(struct extoll_alloc *ex)
   }
 
 
-  printf("Close the RMA port\n");
+  printd("Close the RMA port\n");
   ///rma_disconnect(port,handle);
     rc=rma2_close(ex->rma.port);
 
@@ -139,8 +140,6 @@ int extoll_server_disconnect(struct extoll_alloc *ex)
     print_err(rc);
     return -1;
   }
-
-  free(ex->rma.buf);
 
   return 0;
 }

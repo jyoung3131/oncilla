@@ -17,6 +17,8 @@
 /* Project includes */
 #include <util/compiler.h>
 
+//To use these debugs functions pass 'OCM_VERBOSE=1' before your
+//executable and any arguments
 #define __DEBUG_ENABLED     (getenv("OCM_VERBOSE"))
 
 /**
@@ -54,7 +56,7 @@
         fflush(stderr);                                 \
     } while(0)
 
-/* debug printing. will only print if env var OM_VERBOSE is defined */
+/* debug printing. will only print if env var OCM_VERBOSE is defined */
 #define printd(fmt, args...)                                            \
     do {                                                                \
         if(__DEBUG_ENABLED) {                                           \
