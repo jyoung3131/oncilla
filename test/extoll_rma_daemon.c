@@ -77,6 +77,7 @@ static int one_sided_test(void)
 {
   extoll_t ex;
   struct extoll_params params;
+  int ret_val = 0;
 
   size_t size_B = (1 << 10);
   size_t count = size_B/sizeof(uint32_t);
@@ -94,7 +95,8 @@ static int one_sided_test(void)
     return -1;
 
   uint32_t* buf_ptr = (uint32_t*)ex->rma.buf;
-  memset(buf_ptr, 0, count);
+  //Remember to memset using bytes
+  memset(buf_ptr, 1234, size_B);
 
   //Wait for the client to connect and perform read/write operations
   //This is mainly used to keep the allocation active for this test since
@@ -103,14 +105,17 @@ static int one_sided_test(void)
   
   uint32_t i ;
   for (i = 0; i < count; i++)
-    if (buf_ptr[i] != 0xabcd)
+    if (buf_ptr[i] != 1234)
+    {
       printf("buf_ptr[%d] mismatch=%x\n", i, buf_ptr[i]);
+      ret_val = -1;
+    }
   
   if(teardown(ex) != 0)
     return -1;
 
   /*Return 0 on success*/
-  return 0;
+  return ret_val;
 
 }
 
@@ -161,13 +166,13 @@ static int buffer_size_mismatch_test(void)
 
 // bandwidth test
 /* read / write to/from memory */
-static int read_write_bw_test(void)
+static int read_write_bw_test(uint64_t size_B)
 {
 
   extoll_t ex;
   struct extoll_params params;
   //Allocate 2 GB of data
-  size_t size_B = pow(2,31)+1;
+  //size_t size_B = pow(2,30)+1;
 
   printf("Daemon allocating %lu B or %3f GB of memory\n", size_B, ((double)size_B/pow(2,30.0)));
 
@@ -245,7 +250,7 @@ usage:
       break;
     case 3:
       printf("Running daemon for read/write bandwidth test\n");
-      if(read_write_bw_test()){
+      if(read_write_bw_test(reg_size_B)){
           fprintf(stderr, "FAIL: read/write bandwidth test\n");
           return -1;
       } else

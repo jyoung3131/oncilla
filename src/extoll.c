@@ -103,8 +103,10 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
         }
         else
           len -= max_num_B_per_call;
-        
+
+        //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
         rc=rma2_post_put_bt(ex->rma.port,ex->rma.handle,ex->rma.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION,RMA2_CMD_DEFAULT);
+        //rc=rma2_post_put_bt(ex->rma.port,ex->rma.handle,ex->rma.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
 
       }//end for
     }//end if put
@@ -130,7 +132,8 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
         }
         else
           len -= max_num_B_per_call;
-
+        
+        //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
         rc=rma2_post_get_bt(ex->rma.port,ex->rma.handle,ex->rma.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION,RMA2_CMD_DEFAULT);
 
         //Increment the dest and source offset for each put or get
@@ -143,27 +146,29 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
     if(last_transfer_flag)
       num_notis = last_num_transfers;
 
-    //Wait for N notifications that the data was transferred 
-    for(i=0;i<num_notis;i++)
-    {
-      printd("Notis i %d num_notis %d\n", i, num_notis);
-      //By timing the blocking time we get a full picture of when the put/get operation completed
-      rc=rma2_noti_get_block(ex->rma.port, &(ex->rma.notification));
-
-      if (rc!=RMA2_SUCCESS)
+    //Wait for N notifications that the data was transferred
+      for(i=0;i<num_notis;i++)
       {
-        fprintf(stderr,"error in rma2_noti_get_block\n");
-        return 1;
-      }
-      printd("\nGot Notification:\n");
-      printd("-------------------------\n");
-      //rma2_noti_dump just prints out the notification so it is not neccessarily needed
-      rma2_noti_dump(ex->rma.notification);
-      //But notifications must be freed to process new notifications
-      rma2_noti_free(ex->rma.port,ex->rma.notification);
-      printd("-------------------------\n");
-    }
+        printd("Notis i %d num_notis %d\n", i, num_notis);
+        //By timing the blocking time we get a full picture of when the put/get operation completed
+        rc=rma2_noti_get_block(ex->rma.port, &(ex->rma.notification));
 
+        if (rc!=RMA2_SUCCESS)
+        {
+          fprintf(stderr,"error in rma2_noti_get_block\n");
+          return 1;
+        }
+        printd("\nGot Notification:\n");
+        printd("-------------------------\n");
+        //rma2_noti_dump just prints out the notification so it is not neccessarily needed
+        //Diable by default; check inc/debug.h on how to enable
+#ifdef __DEBUG_ENABLED  
+        rma2_noti_dump(ex->rma.notification);
+#endif
+        //But notifications must be freed to process new notifications
+        rma2_noti_free(ex->rma.port,ex->rma.notification);
+        printd("-------------------------\n");
+      }
   }//end while
 
   free(src_addr);
@@ -195,9 +200,6 @@ extoll_new(struct extoll_params *p)
     goto fail;
 
   //Store the destination node ID, VPID, and NLA
-  //ex->params.dest_node = p->dest_node;
-  //ex->params.dest_vpid = p->dest_vpid;
-  //ex->params.dest_nla = p->dest_nla;
   memcpy(&ex->params, p, sizeof(*p));
 
   /* TODO Lock this list */
@@ -216,9 +218,8 @@ extoll_free(extoll_t ex)
 {
   int ret = 0;
 
-  //Free the buffer in the ex->params struct
-  if(ex->params.buf)
-    free(ex->params.buf);
+  //The buffer params.buf should be freed when
+  //pages are unregistered in extoll_client_disconnect)
 
   //Delete the EXTOLL object from the list
   list_del(&(ex->link));

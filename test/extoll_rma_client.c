@@ -73,12 +73,12 @@ static int alloc_test(long long unsigned int size_B)
 }
 
 /* write/read to/from remote memory timing test. */
-static int read_write_bw_test()
+static int read_write_bw_test(uint64_t max_size_B)
 {
   extoll_t ex;
   struct extoll_params params;
-
-  unsigned long long len = pow(2,30)+1;
+  
+  unsigned long long len = max_size_B+1;
   long long unsigned int size_B=64;
   long long unsigned int size_B2= size_B;
 
@@ -96,7 +96,7 @@ static int read_write_bw_test()
   }
   printf("Setup done\n");
 
-  while(size_B<=pow(2,30)){
+  while(size_B <= max_size_B){
     len=size_B;
 
     if(extoll_write(ex, 0, 0, len))
@@ -106,8 +106,9 @@ static int read_write_bw_test()
     }
     size_B*=2;
   }
-  // read back and wait for completion
-  while(size_B2<=pow(2,30)){
+
+  // Perform read test
+  while(size_B2 <= max_size_B){
     len=size_B2;
     if(extoll_read(ex, 0, 0, len))
     {
@@ -121,7 +122,6 @@ static int read_write_bw_test()
     printf("tear down error\n");
     return -1;
   }
-
 
   return 0; /* test passed */
 }
@@ -148,14 +148,14 @@ static int one_sided_test()
 
   uint32_t* buf_ptr = (uint32_t*)ex->rma.buf;
   for (i = 0; i < count; i++)
-    buf_ptr[i] = 0xabcd;
+    buf_ptr[i] = 1234;
 
   // send and wait for completion 
   if (extoll_write(ex, 0, 0, size_B))
     return -1;
 
   //Reset the buffer for read
-  memset(buf_ptr, 0, count);
+  memset(buf_ptr, 0, size_B);
 
   // read back and wait for completion
   printf("Reading back data\n");
@@ -165,7 +165,7 @@ static int one_sided_test()
   for (i = 0; i < count; i++)
   {
     printf("i %lu val %d\n",i, buf_ptr[i]);
-    if (buf_ptr[i] != 0xabcd)
+    if (buf_ptr[i] != 1234)
     {
       printf("buf_ptr[%lu] mismatch: 0x%x\n", i, buf_ptr[i]);
       ret = -1;
@@ -289,7 +289,7 @@ usage:
       break;
     case 3:
       printf("Running read/write BW test \n");
-      if(read_write_bw_test()){
+      if(read_write_bw_test(reg_size_B)){
         fprintf(stderr, "FAIL: read/write BW test\n");
         return -1;
       } else
