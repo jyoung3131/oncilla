@@ -21,6 +21,16 @@ int main(void)
         goto fail;
     }
 
+    if(ocm_copy2(a, 1)){
+	printf("ocm_copy failed\n");
+	goto fail;
+    } 
+
+    if(ocm_copy2(a, 0)){
+	printf("ocm_copy failed\n");
+	goto fail;
+    } 
+
     if (ocm_localbuf(a, &buf, &buf_len)) {
         printf("ocm_localbuf failed\n");
         goto fail;

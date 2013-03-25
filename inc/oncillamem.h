@@ -25,9 +25,13 @@ typedef struct lib_alloc * ocm_alloc_t;
 
 enum ocm_kind
 {
-    OCM_LOCAL = 1,
+    OCM_LOCAL_HOST = 1,
+    OCM_LOCAL_RMA,
     OCM_REMOTE_RMA,
+    OCM_LOCAL_RDMA,
     OCM_REMOTE_RDMA,
+    OCM_LOCAL_GPU,
+    OCM_REMOTE_GPU,
 };
 
 /* Globals */
@@ -54,4 +58,5 @@ int ocm_copy_in(ocm_alloc_t dst, void *src);
 
 int ocm_copy(ocm_alloc_t dst, ocm_alloc_t src);
 
+int ocm_copy2(ocm_alloc_t src, int read); 
 #endif  /* __ONCILLAMEM_H__ */
