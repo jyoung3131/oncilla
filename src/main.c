@@ -21,6 +21,10 @@
 #include <mem.h>
 #include <pmsg.h>
 
+//Create a signal handler to handle closing the daemon
+#include <signal.h>
+
+
 /* Directory includes */
 
 /* Definitions */
@@ -158,8 +162,30 @@ usage(int argc, char *argv[])
     fprintf(stderr, "Usage: %s nodefile\n", *argv);
 }
 
+static int run_flag;
+
+static void sighandler(int sig)
+{
+    printf("Received signal %d - stopping daemon\n",sig);
+
+    //Set flag so to break out of while loop
+    run_flag = 0;
+
+    //Stop any threads and destroy any state 
+    mem_fin();
+
+    //Remove any mqueues that are in /dev/mqueue
+    pmsg_cleanup();
+
+    exit(0);
+}
+
+
 int main(int argc, char *argv[])
 {
+    signal(SIGINT, &sighandler);
+    run_flag = 1;
+
     printd("Verbose printing enabled\n");
 
     if (argc != 2) {
@@ -186,9 +212,10 @@ int main(int argc, char *argv[])
     if (notify_rank0())
         return -1;
 
-    /* TODO Need to wait on signal or something instead of sleeping */
-    sleep(3600);
+    
+    printf("Press Ctrl-C to close the daemon\n"); 
+   
+    while(run_flag);
 
-    mem_fin();
     return 0;
 }

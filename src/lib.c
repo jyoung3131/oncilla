@@ -154,7 +154,7 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
     msg.pid         = getpid();
     msg.u.req.bytes = bytes;
 
-    if (kind == OCM_LOCAL)
+    if (kind == OCM_LOCAL_HOST)
         msg.u.req.type = ALLOC_MEM_HOST;
     else if (kind == OCM_REMOTE_RDMA)
         msg.u.req.type = ALLOC_MEM_RDMA;
@@ -172,7 +172,7 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
 
     if (msg.u.alloc.type == ALLOC_MEM_HOST) {
         printd("ALLOC_MEM_HOST %lu bytes\n", msg.u.alloc.bytes);
-        alloc->kind             = OCM_LOCAL;
+        alloc->kind             = OCM_LOCAL_HOST;
         alloc->u.local.bytes    = msg.u.alloc.bytes;
         alloc->u.local.ptr      = malloc(msg.u.alloc.bytes);
         if (!alloc->u.local.ptr)
@@ -254,7 +254,7 @@ int
 ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 {
     if (!a) return -1;
-    if (a->kind == OCM_LOCAL) {
+    if (a->kind == OCM_LOCAL_HOST) {
         *buf = a->u.local.ptr;
         *len = a->u.local.bytes;
     }
@@ -278,14 +278,14 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 bool
 ocm_is_remote(ocm_alloc_t a)
 {
-    return (a->kind != OCM_LOCAL);
+    return (a->kind != OCM_LOCAL_HOST);
 }
 
 int
 ocm_remote_sz(ocm_alloc_t a, size_t *len)
 {
     if (!a) return -1;
-    if (a->kind == OCM_LOCAL) {
+    if (a->kind == OCM_LOCAL_HOST) {
         return -1; /* there exists no remote buffer */
     }
     #ifdef INFINIBAND
@@ -317,5 +317,65 @@ int ocm_copy_in(ocm_alloc_t dst, void *src)
 int
 ocm_copy(ocm_alloc_t dst, ocm_alloc_t src)
 {
+    #ifdef INFINIBAND
+    /* from local */
+    if (src->kind == OCM_LOCAL_RDMA)
+    {
+        /* local to local */
+        if (dst->kind == OCM_LOCAL_HOST)
+        {
+            /* simple copy */
+        }
+        /* local to remote */
+        else if (dst-> kind == OCM_REMOTE_RDMA)
+        {
+            ib_write(src->u.rdma.ib, 0, src->u.rdma.local_bytes);
+        }
+    }
+    /* from remote */
+    else if (src->kind == OCM_REMOTE_RDMA)
+    {
+        /* remote to local */
+        if (dst->kind == OCM_LOCAL_RDMA)
+        {
+            ib_read(src->u.rdma.ib, 0, src->u.rdma.local_bytes);
+        }
+        /*// remote to remote 
+ *         else if (dst->kind == OCM_REMOTE)
+ *                 {
+ *                         
+ *                                 }*/
+    }
+    return 0;
+    #endif
+
     return -1;
 }
+
+
+int
+ocm_copy2(ocm_alloc_t src, int read)
+{
+    #ifdef INFINIBAND
+    if (!read)
+    {
+        if(ib_write(src->u.rdma.ib, 0, src->u.rdma.local_bytes))
+        {
+            printf("write failed\n");
+            return -1;
+        }
+    }
+    else
+    {
+        if(ib_read(src->u.rdma.ib, 0, src->u.rdma.local_bytes))
+        {
+            printf("read failed\n");
+            return -1;
+        }
+    }
+    return 0;
+    #endif
+
+    return -1;
+}
+
