@@ -24,6 +24,8 @@ Help("""
 
 gcc = 'clang'
 envcompilepath = ''
+#Disable GPU support by default
+cuda_flag = 0
 
 #Use this function to check and see if a particular application is installed
 def run(cmd, env):
@@ -34,6 +36,7 @@ def run(cmd, env):
     return code
   # Assumes that if a process doesn't call exit, it was successful
   return 0
+
 
 env = Environment()
 conf = Configure(env)
@@ -57,6 +60,11 @@ print 'Testing to see if clang is installed'
 if run('which clang', env):
   print 'clang not found - using gcc\n\n'
   gcc = 'gcc'
+
+print 'Testing to see if CUDA is installed'
+if not run('nvcc --version', env):
+  print 'CUDA found\n'
+  cuda_flag = 1
 env = conf.Finish()
 
 # C configuration environment
@@ -82,6 +90,12 @@ else:
    ccflags.extend(['-O2'])
    ccflags.extend(['-fno-strict-aliasing'])
    libs.append('mcheck')
+
+#Specify if GPU support is available
+if cuda_flag == 1:
+  ccflags.extend(['-DTIMING'])
+  libpath.extend(['/usr/local/cuda/'])
+  cpath.extend(['/usr/local/cuda/include'])
 
 #Detect whether the user wants to compile with IB, EXTOLL, or all networks
 #available
