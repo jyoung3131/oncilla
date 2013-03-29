@@ -18,11 +18,14 @@ Help("""
       Type: 'scons ' to build the optimized version,
             'scons -c' to clean the build directory,
             'scons debug=1' to build the debug version,
-            'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively
+            'scons timing=1' to enable timers for the optimized build,
+            'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively.
       """)
 
 gcc = 'clang'
 envcompilepath = ''
+#Disable GPU support by default
+cuda_flag = 0
 
 #Use this function to check and see if a particular application is installed
 def run(cmd, env):
@@ -33,6 +36,7 @@ def run(cmd, env):
     return code
   # Assumes that if a process doesn't call exit, it was successful
   return 0
+
 
 env = Environment()
 conf = Configure(env)
@@ -56,6 +60,11 @@ print 'Testing to see if clang is installed'
 if run('which clang', env):
   print 'clang not found - using gcc\n\n'
   gcc = 'gcc'
+
+print 'Testing to see if CUDA is installed'
+if not run('nvcc --version', env):
+  print 'CUDA found\n'
+  cuda_flag = 1
 env = conf.Finish()
 
 # C configuration environment
@@ -71,6 +80,9 @@ libflags = []
 #At some point we need to check on this...
 #ccflags.extend(['-fno-strict-aliasing'])
 
+if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
+   ccflags.extend(['-DTIMING'])
+
 if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])
    libflags.extend(['-ggdb','-O0'])
@@ -78,6 +90,12 @@ else:
    ccflags.extend(['-O2'])
    ccflags.extend(['-fno-strict-aliasing'])
    libs.append('mcheck')
+
+#Specify if GPU support is available
+if cuda_flag == 1:
+  ccflags.extend(['-DTIMING'])
+  libpath.extend(['/usr/local/cuda/'])
+  cpath.extend(['/usr/local/cuda/include'])
 
 #Detect whether the user wants to compile with IB, EXTOLL, or all networks
 #available
