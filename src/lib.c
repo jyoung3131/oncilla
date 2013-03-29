@@ -19,8 +19,6 @@
 #include <alloc.h>
 
 /* Directory includes */
-#include <cuda.h>
-#include <cuda_runtime.h> 
 
 /* Globals */
 
@@ -158,12 +156,8 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
 
     if (kind == OCM_LOCAL_HOST)
         msg.u.req.type = ALLOC_MEM_HOST;
-    else if(kind == OCM_LOCAL_GPU)
-        msg.u.req.type = ALLOC_MEM_GPU;
     else if (kind == OCM_REMOTE_RDMA)
         msg.u.req.type = ALLOC_MEM_RDMA;
-    else if (kind == OCM_REMOTE_RMA)
-        msg.u.req.type = ALLOC_MEM_RMA;
     else
         goto out;
     
@@ -184,17 +178,6 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
         if (!alloc->u.local.ptr)
             goto out;
     }
-    #ifdef CUDA
-    else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
-        printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
-        alloc->kind             = OCM_LOCAL_GPU;
-        alloc->u.local.bytes    = msg.u.alloc.bytes;
-        cudaMalloc(alloc->u.local.ptr, msg.u.alloc.bytes);
-        if (!alloc->u.local.ptr)
-            goto out;
-    }
-    
-    #endif
     #ifdef INFINIBAND
     else if (msg.u.alloc.type == ALLOC_MEM_RDMA) {
         printd("ALLOC_MEM_RDMA %lu bytes\n", msg.u.alloc.bytes);
@@ -275,12 +258,6 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
         *buf = a->u.local.ptr;
         *len = a->u.local.bytes;
     }
-    #ifdef CUDA
-    if (a->kind == OCM_LOCAL_GPU) {
-        *buf = a->u.local.ptr;
-        *len = a->u.local.bytes;
-    }
-    #endif
     #ifdef INFINIBAND
     else if (a->kind == OCM_REMOTE_RDMA) {
         *buf = a->u.rdma.local_ptr;
@@ -301,20 +278,14 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 bool
 ocm_is_remote(ocm_alloc_t a)
 {
-  bool is_remote = true;
-
-  if((a->kind == OCM_LOCAL_HOST) || (a->kind != OCM_LOCAL_GPU))
-    is_remote = false;
-
-    return is_remote;
+    return (a->kind != OCM_LOCAL_HOST);
 }
 
 int
 ocm_remote_sz(ocm_alloc_t a, size_t *len)
 {
     if (!a) return -1;
-    if ((a->kind == OCM_LOCAL_HOST) || (a->kind != OCM_LOCAL_GPU))
-    {
+    if (a->kind == OCM_LOCAL_HOST) {
         return -1; /* there exists no remote buffer */
     }
     #ifdef INFINIBAND
