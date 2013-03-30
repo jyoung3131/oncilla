@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include <oncillamem.h>
 
 #define ALLOC_SIZE (1UL << 20)
@@ -21,12 +22,20 @@ int main(void)
         goto fail;
     }
 
-    if(ocm_copy2(a, 1)){
-	printf("ocm_copy failed\n");
+    ocm_param_t copy_params = calloc(1, sizeof(ocm_param_t));
+    copy_params->src_offset = 0;
+    copy_params->dest_offset = 0;
+    copy_params->bytes = ALLOC_SIZE;
+    copy_params->op_flag = 0;
+
+    if(ocm_copy_onesided(a, copy_params)){
+	printf("ocm_copy_onesided failed\n");
 	goto fail;
     } 
+    
+    copy_params->op_flag = 1;
 
-    if(ocm_copy2(a, 0)){
+    if(ocm_copy_onesided(a, copy_params)){
 	printf("ocm_copy failed\n");
 	goto fail;
     } 

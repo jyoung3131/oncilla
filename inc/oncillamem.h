@@ -10,6 +10,7 @@
 /* System includes */
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Other project includes */
 
@@ -34,6 +35,18 @@ enum ocm_kind
     OCM_REMOTE_GPU,
 };
 
+struct ocm_params
+{
+    uint64_t src_offset;  
+    uint64_t dest_offset;
+    uint64_t bytes;
+    //read = 0, write = 1
+    int op_flag;
+};
+
+typedef struct ocm_params * ocm_param_t;
+
+
 /* Globals */
 
 /* Private functions */
@@ -56,7 +69,7 @@ int ocm_remote_sz(ocm_alloc_t a, size_t *len);
 int ocm_copy_out(void *dst, ocm_alloc_t src);
 int ocm_copy_in(ocm_alloc_t dst, void *src);
 
-int ocm_copy(ocm_alloc_t dst, ocm_alloc_t src);
+int ocm_copy(ocm_alloc_t dst, ocm_alloc_t src, ocm_param_t options);
 
-int ocm_copy2(ocm_alloc_t src, int read); 
+int ocm_copy_onesided(ocm_alloc_t src, ocm_param_t options); 
 #endif  /* __ONCILLAMEM_H__ */

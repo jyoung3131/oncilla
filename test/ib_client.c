@@ -104,7 +104,7 @@ static int read_write_test()
   while(size_B<=pow(2,30)){
 	len=size_B;
  
-	if(ib_write(ib, 0, len)||ib_poll(ib))
+	if(ib_write(ib, 0, 0, len)||ib_poll(ib))
 	{
 	    printf("write failed\n");
 	    return -1;
@@ -115,7 +115,7 @@ static int read_write_test()
 	// read back and wait for completion
       while(size_B2<=pow(2,30)){
 	len=size_B2;
-	if(ib_read(ib, 0, len)||ib_poll(ib))
+	if(ib_read(ib, 0, 0, len)||ib_poll(ib))
 	{
 	    printf("read failed\n");
 	    return -1;
@@ -159,13 +159,13 @@ static int one_sided_test(long long unsigned int size_B)
         buf[i] = 0xdeadbeef;
 
     /* send and wait for completion */
-    if (ib_write(ib, 0, len) || ib_poll(ib))
+    if (ib_write(ib, 0, 0, len) || ib_poll(ib))
         return -1;
 
     memset(buf, 0, len);
 
     /* read back and wait for completion */
-    if (ib_read(ib, 0, len) || ib_poll(ib))
+    if (ib_read(ib, 0, 0, len) || ib_poll(ib))
         return -1;
 
     for (i = 0; i < count; i++)
@@ -212,20 +212,20 @@ static int buffer_size_mismatch_test(void)
     /* write back, releasing server */
 
     strncpy(buf->str, "hello", strlen("hello") + 1);
-    if (ib_write(ib, (2 * len), len) || ib_poll(ib))
+    if (ib_write(ib, (2 * len), 0,  len) || ib_poll(ib))
         return -1;
 
     times = 1000;
     char resp[] = "nice to meet you";
     do {
         usleep(500);
-        if (ib_read(ib, (7 * len), len) || ib_poll(ib))
+        if (ib_read(ib, (7 * len), 0,  len) || ib_poll(ib))
             return -1;
         is_equal = (strncmp(buf->str, resp, strlen(resp)) != 0);
     } while (--times > 0 && !is_equal);
 
     buf->str[0] = '\0';
-    if (ib_write(ib, 0, len) || ib_poll(ib))
+    if (ib_write(ib, 0, 0, len) || ib_poll(ib))
         return -1;
 
     //Perform teardown

@@ -344,30 +344,34 @@ int ocm_copy_in(ocm_alloc_t dst, void *src)
 }
 
 int
-ocm_copy(ocm_alloc_t dst, ocm_alloc_t src)
+ocm_copy(ocm_alloc_t dst, ocm_alloc_t src, ocm_param_t cp_param)
 {
     #ifdef INFINIBAND
     /* from local */
     if (src->kind == OCM_LOCAL_RDMA)
     {
-        /* local to local */
+        /*
+         *  local to local 
         if (dst->kind == OCM_LOCAL_HOST)
         {
-            /* simple copy */
+            // simple copy
         }
-        /* local to remote */
+        // local to remote
         else if (dst-> kind == OCM_REMOTE_RDMA)
         {
             ib_write(src->u.rdma.ib, 0, src->u.rdma.local_bytes);
-        }
+        }*/
     }
     /* from remote */
     else if (src->kind == OCM_REMOTE_RDMA)
     {
+      if(cp_param->bytes > src->u.rdma.local_bytes)
+      return -1;
+
         /* remote to local */
         if (dst->kind == OCM_LOCAL_RDMA)
         {
-            ib_read(src->u.rdma.ib, 0, src->u.rdma.local_bytes);
+            ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, src->u.rdma.local_bytes);
         }
         /*// remote to remote 
  *         else if (dst->kind == OCM_REMOTE)
@@ -383,12 +387,16 @@ ocm_copy(ocm_alloc_t dst, ocm_alloc_t src)
 
 
 int
-ocm_copy2(ocm_alloc_t src, int read)
+ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 {
     #ifdef INFINIBAND
-    if (!read)
+    if(cp_param->bytes > src->u.rdma.local_bytes)
+      return -1;
+
+    if (cp_param->op_flag)
     {
-        if(ib_write(src->u.rdma.ib, 0, src->u.rdma.local_bytes))
+
+        if(ib_write(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
         {
             printf("write failed\n");
             return -1;
@@ -396,7 +404,7 @@ ocm_copy2(ocm_alloc_t src, int read)
     }
     else
     {
-        if(ib_read(src->u.rdma.ib, 0, src->u.rdma.local_bytes))
+        if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
         {
             printf("read failed\n");
             return -1;
