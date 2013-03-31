@@ -104,9 +104,9 @@ ib_nic_ip(int idx, char *ip_str, size_t len)
         return -1;
     }
     close(fd);
-    strncpy(ip_str,
-            inet_ntoa(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr),
-            len);
+
+    //This line requires that the optimized version of Oncilla be compiled with -fno-strict-aliasing
+    strncpy(ip_str, inet_ntoa(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr), len);
     ip_str[len-1] = '\0'; /* just in case */
     return 0;
 }

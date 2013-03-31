@@ -87,10 +87,12 @@ if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-pl
 if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])
    libflags.extend(['-ggdb','-O0'])
+   #Be careful using memcheck as it seems like it may affect some buffer used in the IB CM process.
+   #This error shows up as the IB client trying to finish a connection and failing.
+   #libs.append('mcheck')
 else:
    ccflags.extend(['-O2'])
    ccflags.extend(['-fno-strict-aliasing'])
-   libs.append('mcheck')
 
 #Specify if GPU support is available
 if cuda_flag == 1:
