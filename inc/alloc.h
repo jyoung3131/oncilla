@@ -51,6 +51,8 @@ struct alloc_request
     /* TODO other properties */
 };
 
+///Structure that holds configuration information
+///for each node; not currently required
 struct alloc_node_config
 {
     char ib_ip[HOST_NAME_MAX];

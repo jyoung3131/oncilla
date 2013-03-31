@@ -141,7 +141,7 @@ out:
 }
 
 ocm_alloc_t
-ocm_alloc(size_t bytes, enum ocm_kind kind)
+ocm_alloc(ocm_alloc_param_t alloc_param)
 {
     struct message msg;
     struct lib_alloc *alloc;
@@ -154,18 +154,30 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
     msg.type        = MSG_REQ_ALLOC;
     msg.status      = MSG_REQUEST;
     msg.pid         = getpid();
-    msg.u.req.bytes = bytes;
+    //Specify the allocation size of the remote buffer; in
+    //the local case the local_alloc_bytes field is used since
+    //we will end up making a local allocation
+    msg.u.req.bytes = alloc_param->rem_alloc_bytes;
 
-    if (kind == OCM_LOCAL_HOST)
+    if (alloc_param->kind == OCM_LOCAL_HOST)
+    {
         msg.u.req.type = ALLOC_MEM_HOST;
-    else if(kind == OCM_LOCAL_GPU)
+        msg.u.req.bytes = alloc_param->local_alloc_bytes;
+    }
+    else if(alloc_param->kind == OCM_LOCAL_GPU)
+    {
         msg.u.req.type = ALLOC_MEM_GPU;
-    else if (kind == OCM_REMOTE_RDMA)
+        msg.u.req.bytes = alloc_param->local_alloc_bytes;
+    }
+    else if (alloc_param->kind == OCM_REMOTE_RDMA)
         msg.u.req.type = ALLOC_MEM_RDMA;
-    else if (kind == OCM_REMOTE_RMA)
+    else if (alloc_param->kind == OCM_REMOTE_RMA)
         msg.u.req.type = ALLOC_MEM_RMA;
     else
+    {
+        printf("No allocation type specified\n");
         goto out;
+    }
     
     printd("sending req_alloc to daemon\n");
     if (pmsg_send(PMSG_DAEMON_PID, &msg))
@@ -201,7 +213,7 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
         struct ib_params p;
         p.addr      = strdup(msg.u.alloc.u.rdma.ib_ip);
         p.port      = msg.u.alloc.u.rdma.port;
-        p.buf_len   = (1 << 10); /* XXX accept func param for this */
+        p.buf_len   = alloc_param->local_alloc_bytes;
         p.buf       = malloc(p.buf_len);
         if (!p.buf)
             goto out;

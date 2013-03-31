@@ -35,6 +35,8 @@ enum ocm_kind
     OCM_REMOTE_GPU,
 };
 
+///General OCM parameters for read/write and
+///other operations
 struct ocm_params
 {
     uint64_t src_offset;  
@@ -46,6 +48,16 @@ struct ocm_params
 
 typedef struct ocm_params * ocm_param_t;
 
+///OCM allocation parameters
+struct ocm_alloc_params
+{
+    uint64_t local_alloc_bytes;
+    uint64_t rem_alloc_bytes;
+    enum ocm_kind kind;
+};
+
+typedef struct ocm_alloc_params * ocm_alloc_param_t;
+
 
 /* Globals */
 
@@ -55,7 +67,7 @@ typedef struct ocm_params * ocm_param_t;
 
 int ocm_init(void);
 int ocm_tini(void);
-ocm_alloc_t ocm_alloc(size_t bytes, enum ocm_kind kind);
+ocm_alloc_t ocm_alloc(ocm_alloc_param_t alloc_param);
 int ocm_free(ocm_alloc_t a);
 
 /* get pointer to local buffer */

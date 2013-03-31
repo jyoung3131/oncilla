@@ -51,6 +51,9 @@ enum message_status
     MSG_RESPONSE
 };
 
+///The message structure is passed between Oncilla daemon
+///processes and contains information about the allocation
+///request (and response) and the allocation
 struct message
 {
     enum message_type type;
