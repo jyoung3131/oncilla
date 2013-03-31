@@ -19,6 +19,8 @@
 #include <alloc.h>
 
 /* Directory includes */
+#include <cuda.h>
+#include <cuda_runtime.h> 
 
 /* Globals */
 
@@ -139,7 +141,7 @@ out:
 }
 
 ocm_alloc_t
-ocm_alloc(size_t bytes, enum ocm_kind kind)
+ocm_alloc(ocm_alloc_param_t alloc_param)
 {
     struct message msg;
     struct lib_alloc *alloc;
@@ -152,14 +154,30 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
     msg.type        = MSG_REQ_ALLOC;
     msg.status      = MSG_REQUEST;
     msg.pid         = getpid();
-    msg.u.req.bytes = bytes;
+    //Specify the allocation size of the remote buffer; in
+    //the local case the local_alloc_bytes field is used since
+    //we will end up making a local allocation
+    msg.u.req.bytes = alloc_param->rem_alloc_bytes;
 
-    if (kind == OCM_LOCAL_HOST)
+    if (alloc_param->kind == OCM_LOCAL_HOST)
+    {
         msg.u.req.type = ALLOC_MEM_HOST;
-    else if (kind == OCM_REMOTE_RDMA)
+        msg.u.req.bytes = alloc_param->local_alloc_bytes;
+    }
+    else if(alloc_param->kind == OCM_LOCAL_GPU)
+    {
+        msg.u.req.type = ALLOC_MEM_GPU;
+        msg.u.req.bytes = alloc_param->local_alloc_bytes;
+    }
+    else if (alloc_param->kind == OCM_REMOTE_RDMA)
         msg.u.req.type = ALLOC_MEM_RDMA;
+    else if (alloc_param->kind == OCM_REMOTE_RMA)
+        msg.u.req.type = ALLOC_MEM_RMA;
     else
+    {
+        printf("No allocation type specified\n");
         goto out;
+    }
     
     printd("sending req_alloc to daemon\n");
     if (pmsg_send(PMSG_DAEMON_PID, &msg))
@@ -178,13 +196,24 @@ ocm_alloc(size_t bytes, enum ocm_kind kind)
         if (!alloc->u.local.ptr)
             goto out;
     }
+    #ifdef CUDA
+    else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
+        printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
+        alloc->kind             = OCM_LOCAL_GPU;
+        alloc->u.local.bytes    = msg.u.alloc.bytes;
+        cudaMalloc(alloc->u.local.ptr, msg.u.alloc.bytes);
+        if (!alloc->u.local.ptr)
+            goto out;
+    }
+    
+    #endif
     #ifdef INFINIBAND
     else if (msg.u.alloc.type == ALLOC_MEM_RDMA) {
         printd("ALLOC_MEM_RDMA %lu bytes\n", msg.u.alloc.bytes);
         struct ib_params p;
         p.addr      = strdup(msg.u.alloc.u.rdma.ib_ip);
         p.port      = msg.u.alloc.u.rdma.port;
-        p.buf_len   = (1 << 10); /* XXX accept func param for this */
+        p.buf_len   = alloc_param->local_alloc_bytes;
         p.buf       = malloc(p.buf_len);
         if (!p.buf)
             goto out;
@@ -258,6 +287,12 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
         *buf = a->u.local.ptr;
         *len = a->u.local.bytes;
     }
+    #ifdef CUDA
+    if (a->kind == OCM_LOCAL_GPU) {
+        *buf = a->u.local.ptr;
+        *len = a->u.local.bytes;
+    }
+    #endif
     #ifdef INFINIBAND
     else if (a->kind == OCM_REMOTE_RDMA) {
         *buf = a->u.rdma.local_ptr;
@@ -278,14 +313,20 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 bool
 ocm_is_remote(ocm_alloc_t a)
 {
-    return (a->kind != OCM_LOCAL_HOST);
+  bool is_remote = true;
+
+  if((a->kind == OCM_LOCAL_HOST) || (a->kind != OCM_LOCAL_GPU))
+    is_remote = false;
+
+    return is_remote;
 }
 
 int
 ocm_remote_sz(ocm_alloc_t a, size_t *len)
 {
     if (!a) return -1;
-    if (a->kind == OCM_LOCAL_HOST) {
+    if ((a->kind == OCM_LOCAL_HOST) || (a->kind != OCM_LOCAL_GPU))
+    {
         return -1; /* there exists no remote buffer */
     }
     #ifdef INFINIBAND
@@ -315,30 +356,34 @@ int ocm_copy_in(ocm_alloc_t dst, void *src)
 }
 
 int
-ocm_copy(ocm_alloc_t dst, ocm_alloc_t src)
+ocm_copy(ocm_alloc_t dst, ocm_alloc_t src, ocm_param_t cp_param)
 {
     #ifdef INFINIBAND
     /* from local */
     if (src->kind == OCM_LOCAL_RDMA)
     {
-        /* local to local */
+        /*
+         *  local to local 
         if (dst->kind == OCM_LOCAL_HOST)
         {
-            /* simple copy */
+            // simple copy
         }
-        /* local to remote */
+        // local to remote
         else if (dst-> kind == OCM_REMOTE_RDMA)
         {
             ib_write(src->u.rdma.ib, 0, src->u.rdma.local_bytes);
-        }
+        }*/
     }
     /* from remote */
     else if (src->kind == OCM_REMOTE_RDMA)
     {
+      if(cp_param->bytes > src->u.rdma.local_bytes)
+      return -1;
+
         /* remote to local */
         if (dst->kind == OCM_LOCAL_RDMA)
         {
-            ib_read(src->u.rdma.ib, 0, src->u.rdma.local_bytes);
+            ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, src->u.rdma.local_bytes);
         }
         /*// remote to remote 
  *         else if (dst->kind == OCM_REMOTE)
@@ -354,12 +399,16 @@ ocm_copy(ocm_alloc_t dst, ocm_alloc_t src)
 
 
 int
-ocm_copy2(ocm_alloc_t src, int read)
+ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 {
     #ifdef INFINIBAND
-    if (!read)
+    if(cp_param->bytes > src->u.rdma.local_bytes)
+      return -1;
+
+    if (cp_param->op_flag)
     {
-        if(ib_write(src->u.rdma.ib, 0, src->u.rdma.local_bytes))
+
+        if(ib_write(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
         {
             printf("write failed\n");
             return -1;
@@ -367,7 +416,7 @@ ocm_copy2(ocm_alloc_t src, int read)
     }
     else
     {
-        if(ib_read(src->u.rdma.ib, 0, src->u.rdma.local_bytes))
+        if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
         {
             printf("read failed\n");
             return -1;

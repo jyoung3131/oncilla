@@ -44,16 +44,16 @@ static LIST_HEAD(ib_allocs);
 
 /* only used by client code */
 static int
-post_send(struct ib_alloc *ib, int opcode,
-        /* TODO size_t offset (local buffer) */
-        size_t offset /*remote*/, size_t len)
+post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset, size_t len)
 {
     struct ibv_sge          sge;
     struct ibv_send_wr      wr;
     struct ibv_send_wr      *bad_wr;
 
     /* "from" address and key */
-    sge.addr   = (uintptr_t)ib->params.buf;
+    BUG(src_offset > len);
+
+    sge.addr   = (uintptr_t)(ib->params.buf+src_offset);
     sge.length = len;
     sge.lkey   = ib->verbs.mr->lkey;
 
@@ -68,7 +68,7 @@ post_send(struct ib_alloc *ib, int opcode,
     wr.num_sge              = 1;
     /* "to" address and key */
     wr.wr.rdma.rkey         = ib->ibv.buf_rkey;
-    wr.wr.rdma.remote_addr  = ib->ibv.buf_va + offset;
+    wr.wr.rdma.remote_addr  = ib->ibv.buf_va + dest_offset;
 
     if (ibv_post_send(ib->rdma.id->qp, &wr, &bad_wr)){
         perror("ibv_post_send");
@@ -228,28 +228,28 @@ ib_reg_mr(ib_t ib, void *buf, size_t len)
 
 /* client function: pull data fom server */
 int
-ib_read(ib_t ib, size_t offset, size_t len)
+ib_read(ib_t ib, size_t src_offset, size_t dest_offset, size_t len)
 {
     if (!ib)
         return -1;
-    if ((offset + len) > ib->ibv.buf_len) {
+    if ((dest_offset + len) > ib->ibv.buf_len) {
         printd("error: would read past end of remote buffer\n");
         return -1;
     }
-    return post_send(ib, IBV_WR_RDMA_READ, offset, len);
+    return post_send(ib, IBV_WR_RDMA_READ, src_offset, dest_offset, len);
 }
 
 /* client function: push data to server */
 int
-ib_write(ib_t ib, size_t offset, size_t len)
+ib_write(ib_t ib, size_t src_offset, size_t dest_offset, size_t len)
 {
     if (!ib || len == 0)
         return -1;
-    if ((offset + len) > ib->ibv.buf_len) {
+    if ((dest_offset + len) > ib->ibv.buf_len) {
         printd("error: would write past end of remote buffer\n");
         return -1;
     }
-    return post_send(ib, IBV_WR_RDMA_WRITE, offset, len);
+    return post_send(ib, IBV_WR_RDMA_WRITE, src_offset, dest_offset, len);
 }
 
 /* Wait for some event. Code found in manpage of ibv_get_cq_event */
