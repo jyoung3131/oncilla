@@ -65,7 +65,7 @@ if run('which clang', env):
 print 'Testing to see if CUDA is installed'
 if not run('nvcc --version', env):
   print 'CUDA found\n'
-  cuda_flag = 1
+#  cuda_flag = 1
 env = conf.Finish()
 
 # C configuration environment
@@ -87,16 +87,18 @@ if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-pl
 if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])
    libflags.extend(['-ggdb','-O0'])
+   #Be careful using memcheck as it seems like it may affect some buffer used in the IB CM process.
+   #This error shows up as the IB client trying to finish a connection and failing.
+   #libs.append('mcheck')
 else:
    ccflags.extend(['-O2'])
    ccflags.extend(['-fno-strict-aliasing'])
-   libs.append('mcheck')
 
 #Specify if GPU support is available
 if cuda_flag == 1:
   ccflags.extend(['-DCUDA'])
-  libpath.extend(['/usr/local/cuda/lib64'])
-  cpath.extend(['/usr/local/cuda/include'])
+  libpath.extend(['/usr/local/cuda-5.0/lib64'])
+  cpath.extend(['/usr/local/cuda-5.0/include'])
   cuda_libs.extend(['cuda','cudart'])
 
 #Detect whether the user wants to compile with IB, EXTOLL, or all networks
@@ -175,6 +177,6 @@ solib = env.SharedLibrary('lib/libocm.so', libfiles)
 
 #Export variables set in this file so they can be imported into the SConscript
 exp_env = Environment()
-Export('env', 'gcc','compilepath')
+Export('env','gcc','compilepath','libpath','libs')
 #Then call SConscript 
 SConscript(['test/SConscript'])

@@ -80,6 +80,9 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
 
 /* Public functions */
 
+///This function uses socket calls to get the 
+///IP address associated with the IB adapter referred
+///to by the index, idx
 int
 ib_nic_ip(int idx, char *ip_str, size_t len)
 {
@@ -91,6 +94,7 @@ ib_nic_ip(int idx, char *ip_str, size_t len)
 
     len = (len > HOST_NAME_MAX ? HOST_NAME_MAX : len);
 
+    //Create a UDP / Datagram socket
     if (0 > (fd = socket(AF_INET, SOCK_DGRAM, 0))) {
         printd("invalid socket returned\n");
         return -1;
@@ -104,9 +108,9 @@ ib_nic_ip(int idx, char *ip_str, size_t len)
         return -1;
     }
     close(fd);
-    strncpy(ip_str,
-            inet_ntoa(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr),
-            len);
+
+    //This line requires that the optimized version of Oncilla be compiled with -fno-strict-aliasing
+    strncpy(ip_str, inet_ntoa(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr), len);
     ip_str[len-1] = '\0'; /* just in case */
     return 0;
 }

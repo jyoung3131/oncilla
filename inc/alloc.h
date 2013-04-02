@@ -74,7 +74,9 @@ struct alloc_ation
 
     union {
         struct {
-            /* TODO */
+          RMA2_Nodeid node_id; //uint16_t
+          RMA2_VPID vpid;    //uint16_t
+          RMA2_NLA dest_nla; //uint64_t
         } rma;
         struct {
             /* RDMA CM needs these */
