@@ -207,7 +207,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
   else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
     printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
     alloc->kind             = OCM_LOCAL_GPU;
-    alloc->u.local.bytes    = msg.u.alloc.bytes;
+    alloc->u.gpu.bytes    = msg.u.alloc.bytes;
     cudaMalloc(alloc->u.gpu.cuda_ptr, msg.u.alloc.bytes);
     if (!alloc->u.gpu.cuda_ptr)
       goto out;
@@ -332,7 +332,7 @@ ocm_is_remote(ocm_alloc_t a)
 ocm_remote_sz(ocm_alloc_t a, size_t *len)
 {
   if (!a) return -1;
-  if ((a->kind == OCM_LOCAL_HOST) || (a->kind != OCM_LOCAL_GPU))
+  if ((a->kind == OCM_LOCAL_HOST) || (a->kind == OCM_LOCAL_GPU))
   {
     return -1; /* there exists no remote buffer */
   }
@@ -425,7 +425,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
   }
 #endif
 #ifdef CUDA
-  else if (src->kind == OCM_REMOTE_RDMA)
+  else if (src->kind == OCM_LOCAL_GPU)
   {
     //Do a cudaMemcpy from GPU memory to the local host memory
     if(dest->kind == OCM_LOCAL_HOST)

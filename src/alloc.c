@@ -98,6 +98,11 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
     }
     #endif
 
+    #ifdef CUDA
+    else if (req->type == ALLOC_MEM_GPU)
+        alloc->remote_rank = req->orig_rank;
+    #endif
+
     else BUG(1);
 
     INIT_LIST_HEAD(&alloc->link);
@@ -149,7 +154,10 @@ alloc_ate(struct alloc_ation *alloc)
         BUG(1);
     }
     #endif
-
+    #ifdef CUDA
+    else if (alloc->type == ALLOC_MEM_GPU){
+    }
+    #endif
     else {
         BUG(1);
     }
