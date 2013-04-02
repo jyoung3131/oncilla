@@ -53,14 +53,13 @@ struct lib_alloc {
       size_t bytes;
       void *ptr;
     } local;
+    //GPU allocation
 #ifdef CUDA
     struct {
       size_t bytes;
-      void **ptr;
+      void **cuda_ptr;
     } gpu;
 #endif
-
-    /* TODO GPU? Not sure where that would fit. */
   } u;
 };
 
@@ -208,9 +207,9 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
   else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
     printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
     alloc->kind             = OCM_LOCAL_GPU;
-    alloc->u.local.bytes    = msg.u.alloc.bytes;
-    cudaMalloc(&alloc->u.local.ptr, msg.u.alloc.bytes);
-    if (!alloc->u.local.ptr)
+    alloc->u.gpu.bytes    = msg.u.alloc.bytes;
+    cudaMalloc(alloc->u.gpu.cuda_ptr, msg.u.alloc.bytes);
+    if (!alloc->u.gpu.cuda_ptr)
       goto out;
   }
 
@@ -296,9 +295,9 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
     *len = a->u.local.bytes;
   }
 #ifdef CUDA
-  else if (a->kind == OCM_LOCAL_GPU) {
-    *buf = a->u.local.ptr;
-    *len = a->u.local.bytes;
+  if (a->kind == OCM_LOCAL_GPU) {
+    buf = a->u.gpu.cuda_ptr;
+    *len = a->u.gpu.bytes;
   }
 #endif
 #ifdef INFINIBAND
@@ -394,7 +393,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 #ifdef CUDA
     else if(dest->kind == OCM_LOCAL_GPU)
     {
-      cudaMemcpy(dest->u.gpu.ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
+      cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
     }
 #endif
     else
@@ -416,7 +415,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     else if(dest->kind == OCM_LOCAL_GPU)
     {
       ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
-      cudaMemcpy(dest->u.gpu.ptr+cp_param->dest_offset_2,src->u.rdma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
+      cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rdma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
     }
 #endif
     else
@@ -431,11 +430,11 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     //Do a cudaMemcpy from GPU memory to the local host memory
     if(dest->kind == OCM_LOCAL_HOST)
     {
-      cudaMemcpy(dest->u.local.ptr+cp_param->dest_offset, src->u.gpu.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
+      cudaMemcpy(dest->u.local.ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
     }
     else if(dest->kind == OCM_REMOTE_RDMA)
     {
-      cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
+      cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
       ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 
     }
