@@ -23,7 +23,7 @@
 #include <nodefile.h>
 
 /* Directory includes */
-
+#include "extoll.h"
 /* Globals */
 
 /* Internal definitions */
@@ -103,7 +103,7 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
         req->orig_rank, node_file_entries);
                  alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
         node = &node_file[alloc->remote_rank];
-        BUG(1); /* TODO */
+        printd("alloc: rma on rank %d\n", alloc->remote_rank);
     }
     #endif
 
@@ -161,7 +161,7 @@ alloc_ate(struct alloc_ation *alloc)
     #ifdef EXTOLL
     extoll_t ex;
 
-    else if (alloc->type == ALLOC_MEM_RMA) {
+    if (alloc->type == ALLOC_MEM_RMA) {
         struct extoll_params p;
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
@@ -169,14 +169,20 @@ alloc_ate(struct alloc_ation *alloc)
         ABORT2(!p.buf);
         if (!(ex = extoll_new(&p)))
             ABORT();
-        printd("EXTOLL: set up server connection\n");
+        printd("EXTOLL: setting up server connection\n");
         if (extoll_connect(ex, true))
             ABORT();
+
+        printd("EXTOLL parameters for the server are NodeID: %d VPID: %d and NLA %lx\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
+        //Save these parameters into the allocation struct so they get passed back in the return message to the client
+        alloc->u.rma.node_id = ex->params.dest_node;
+        alloc->u.rma.vpid = ex->params.dest_vpid;
+        alloc->u.rma.dest_nla = ex->params.dest_nla;
    
     }
     #endif
     #ifdef CUDA
-    else if (alloc->type == ALLOC_MEM_GPU){
+    if (alloc->type == ALLOC_MEM_GPU){
     }
     #endif
     else {

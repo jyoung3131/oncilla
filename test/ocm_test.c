@@ -29,6 +29,10 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     case 3:
       alloc_params->kind = OCM_LOCAL_HOST;
       break;
+    case 4:
+      alloc_params->kind = OCM_REMOTE_RMA;
+      alloc_params->rem_alloc_bytes = rem_size_B;
+      break;
     default:
       goto usage;
   }
@@ -38,12 +42,15 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
     return -1;
   }
+
+  if(suboption != 4)
+  {
   if (ocm_localbuf(a, &buf, &buf_len)) {
     printf("ocm_localbuf failed\n");
     goto fail;
   }
   printf("local buffer size %lu @ %p\n", buf_len, buf);
-
+  }
   if (ocm_is_remote(a)) {
     if (!ocm_remote_sz(a, &remote_len)) {
       printf("alloc is remote; size = %lu\n", remote_len);
@@ -74,7 +81,7 @@ usage:
         " <allocation size 2 in MB (alloc2)>\n "
 	"\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
 	"\tSuboptions: 1=allocate IB buffer (alloc1-local, alloc2-remote); 2=allocate GPU memory\n"
-	" \t\t    3=allocate host memory\n");
+	" \t\t    3=allocate host memory 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n");
     return -1;
 }
 
@@ -295,7 +302,7 @@ usage:
   switch (atoi(argv[1])){
     //allocation
     case 1:
-      printf("Testing IB allocation with local buffer of size %4f MB and remote buffer of size %4f MB\n", local_size_MB, rem_size_MB);
+      printf("Testing OCM allocation with local buffer of size %4f MB and remote buffer of size %4f MB\n", local_size_MB, rem_size_MB);
       if(alloc_test(atoi(argv[2]),local_size_B, rem_size_B)){
         fprintf(stderr, "FAIL: allocation test\n");
 	return -1;

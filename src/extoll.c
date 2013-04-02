@@ -58,8 +58,8 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
 
   //Initialize the destination and source offset and check to make sure that we aren't
   //reading or writing past the local or remote buffer
-  ex->rma.dest_offset = dest_offset;
-  ex->rma.src_offset = src_offset;
+  ex->rma_conn.dest_offset = dest_offset;
+  ex->rma_conn.src_offset = src_offset;
 
   printd("RMA2 data transfer - need to transfer %lu B in 8 MB chunks\n", len);
   printd("Up to %d overlapping put/get operations are allowed\n", num_notis);
@@ -68,8 +68,8 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
   {
     //Each time through the loop update the base address to put/get to/from and then update
     //the address for each additional put/get call
-    dest_addr[0] = ex->params.dest_nla+ex->rma.dest_offset;
-    src_addr[0] = ex->rma.src_offset;
+    dest_addr[0] = ex->params.dest_nla+ex->rma_conn.dest_offset;
+    src_addr[0] = ex->rma_conn.src_offset;
 
     for(i = 1; i < num_notis; i++)
     {
@@ -100,8 +100,8 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
           len -= max_num_B_per_call;
 
         //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
-        rc=rma2_post_put_bt(ex->rma.port,ex->rma.handle,ex->rma.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_ALL_NOTIFICATIONS,RMA2_CMD_DEFAULT);
-        //rc=rma2_post_put_bt(ex->rma.port,ex->rma.handle,ex->rma.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
+        rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_ALL_NOTIFICATIONS,RMA2_CMD_DEFAULT);
+        //rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
 
       }//end for
     }//end if put
@@ -129,11 +129,11 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
           len -= max_num_B_per_call;
         
         //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
-        rc=rma2_post_get_bt(ex->rma.port,ex->rma.handle,ex->rma.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION,RMA2_CMD_DEFAULT);
+        rc=rma2_post_get_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION,RMA2_CMD_DEFAULT);
 
         //Increment the dest and source offset for each put or get
-        ex->rma.dest_offset += max_num_B_per_call;
-        ex->rma.src_offset += max_num_B_per_call;
+        ex->rma_conn.dest_offset += max_num_B_per_call;
+        ex->rma_conn.src_offset += max_num_B_per_call;
       }//end for
     }
 
@@ -146,7 +146,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
       {
         printd("Notis i %d num_notis %d\n", i, num_notis);
         //By timing the blocking time we get a full picture of when the put/get operation completed
-        rc=rma2_noti_get_block(ex->rma.port, &(ex->rma.notification));
+        rc=rma2_noti_get_block(ex->rma_conn.port, &(ex->rma_conn.notification));
 
         if (rc!=RMA2_SUCCESS)
         {
@@ -158,10 +158,10 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
         //rma2_noti_dump just prints out the notification so it is not neccessarily needed
         //Diable by default; check inc/debug.h on how to enable
 #ifdef __DEBUG_ENABLED  
-        rma2_noti_dump(ex->rma.notification);
+        rma2_noti_dump(ex->rma_conn.notification);
 #endif
         //But notifications must be freed to process new notifications
-        rma2_noti_free(ex->rma.port,ex->rma.notification);
+        rma2_noti_free(ex->rma_conn.port,ex->rma_conn.notification);
         printd("-------------------------\n");
       }
   }//end while
@@ -236,6 +236,9 @@ void extoll_notification(extoll_t ex)
     run_once = 1;
     extoll_server_notification((struct extoll_alloc*)ex);
   }
+  //TODO - fix the RMA free path so that we don't need to call 
+  //the disconnect function here
+  extoll_server_disconnect((struct extoll_alloc*)ex);
 }
 
 //Close down the EXTOLL server and client applications
@@ -267,7 +270,9 @@ extoll_connect(extoll_t ex, bool is_server)
     return -1;
 
   if (is_server)
+  {
     err = extoll_server_connect((struct extoll_alloc*)ex);
+  }
   else
     err = extoll_client_connect((struct extoll_alloc*)ex);
 

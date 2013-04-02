@@ -56,7 +56,7 @@ struct __rma_t {
 struct extoll_alloc
 {
     struct list_head    link;
-    struct __rma_t rma;
+    struct __rma_t rma_conn;
     struct extoll_params params;
 };
 

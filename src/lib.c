@@ -19,8 +19,10 @@
 #include <alloc.h>
 
 /* Directory includes */
+#ifdef CUDA
 #include <cuda.h>
 #include <cuda_runtime.h> 
+#endif
 
 /* Globals */
 
@@ -45,7 +47,11 @@ struct lib_alloc {
 #endif
 #ifdef EXTOLL
     struct {
-      /* TODO */
+      extoll_t ex;
+      int remote_rank;
+      size_t remote_bytes;
+      size_t local_bytes;
+      void *local_ptr;
     } rma;
 #endif
     //Local allocation
@@ -256,12 +262,40 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 
 #ifdef EXTOLL
   else if (msg.u.alloc.type == ALLOC_MEM_RMA) {
-    printd("adding new lib_alloc to list\n");
+    printd("ALLOC_MEM_RMA %lu bytes\n", msg.u.alloc.bytes);
+    struct extoll_params p;
+    p.buf_len   = alloc_param->local_alloc_bytes;
+    p.dest_node = msg.u.alloc.u.rma.node_id;
+    p.dest_vpid = msg.u.alloc.u.rma.vpid;
+    p.dest_nla =  msg.u. alloc.u.rma.dest_nla;
+
+    //The client will allocate the buffer p.buf
+
+    printd("RDMA: local buf %lu bytes <-->"
+        " (remote rank%d) buf %lu bytes\n",
+        p.buf_len, 
+        msg.u.alloc.remote_rank, msg.u.alloc.bytes);
+
+    alloc->u.rma.ex = extoll_new(&p);
+    if (!alloc->u.rma.ex)
+      goto out;
+
+    INIT_LIST_HEAD(&alloc->link);
+    alloc->kind                 = OCM_REMOTE_RMA;
+    alloc->u.rma.remote_rank   = msg.u.alloc.remote_rank;
+    alloc->u.rma.remote_bytes  = msg.u.alloc.bytes;
+    alloc->u.rma.local_bytes   = p.buf_len;
+
+    if (extoll_connect(alloc->u.rma.ex, false))
+      goto out;
+  
+    //Once the connection is complete the buffer is allocated
+    //(char*)alloc->u.rma.local_ptr = (char*)alloc->u.rma.ex->rma_conn.buf;
+
+    printd("adding new alloc to list\n");
     lock_allocs();
     list_add(&alloc->link, &allocs);
     unlock_allocs();
-
-    BUG(1); /* TODO path not implemented... */
   }
 #endif
 
@@ -308,7 +342,8 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 #endif
 #ifdef EXTOLL
   else if (a->kind == OCM_REMOTE_RMA) {
-    BUG(1);
+    *buf = a->u.rma.local_ptr;
+    *len = a->u.rma.local_bytes;
   } 
 #endif
   else {
@@ -343,7 +378,7 @@ ocm_remote_sz(ocm_alloc_t a, size_t *len)
 #endif
 #ifdef EXTOLL
   else if (a->kind == OCM_REMOTE_RMA) {
-    BUG(1);
+    *len = a->u.rma.remote_bytes;
   }
 #endif
   else {

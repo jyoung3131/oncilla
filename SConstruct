@@ -65,7 +65,7 @@ if run('which clang', env):
 print 'Testing to see if CUDA is installed'
 if not run('nvcc --version', env):
   print 'CUDA found\n'
-  cuda_flag = 1
+#  cuda_flag = 1
 env = conf.Finish()
 
 # C configuration environment
@@ -97,8 +97,8 @@ else:
 #Specify if GPU support is available
 if cuda_flag == 1:
   ccflags.extend(['-DCUDA'])
-  libpath.extend(['/usr/local/cuda/lib64'])
-  cpath.extend(['/usr/local/cuda/include'])
+  libpath.extend(['/usr/local/cuda-5.0/lib64'])
+  cpath.extend(['/usr/local/cuda-5.0/include'])
   cuda_libs.extend(['cuda','cudart'])
 
 #Detect whether the user wants to compile with IB, EXTOLL, or all networks

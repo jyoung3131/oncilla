@@ -34,12 +34,12 @@ int extoll_client_connect(struct extoll_alloc *ex)
 
   printf("Setting up remote memory connection to node %d, vpid %d, and 0x%lx NLA with RMA2\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
 
-  ex->rma.buf = (void*)malloc(ex->params.buf_len);
-  memset(ex->rma.buf, 0, ex->params.buf_len);
-  printd("Region starts at %p\n", ex->rma.buf);
+  ex->rma_conn.buf = (void*)malloc(ex->params.buf_len);
+  memset(ex->rma_conn.buf, 0, ex->params.buf_len);
+  printd("Region starts at %p\n", ex->rma_conn.buf);
 
   printd("Opening port\n");
-  rc=rma2_open(&(ex->rma.port));
+  rc=rma2_open(&(ex->rma_conn.port));
 
   if (rc!=RMA2_SUCCESS) 
   { 
@@ -48,7 +48,7 @@ int extoll_client_connect(struct extoll_alloc *ex)
   }
 
   //Must connect to the remote node for put/get operations
-  rc = rma2_connect(ex->rma.port, ex->params.dest_node, ex->params.dest_vpid, ex->rma.conn_type, &(ex->rma.handle));
+  rc = rma2_connect(ex->rma_conn.port, ex->params.dest_node, ex->params.dest_vpid, ex->rma_conn.conn_type, &(ex->rma_conn.handle));
 
   if (rc!=RMA2_SUCCESS) 
   { 
@@ -58,7 +58,7 @@ int extoll_client_connect(struct extoll_alloc *ex)
 
   printd("Registering with remote memory\n");
   //register pins the memory and associates it with an RMA2_Region
-  rc=rma2_register(ex->rma.port, ex->rma.buf, ex->params.buf_len, &(ex->rma.region));
+  rc=rma2_register(ex->rma_conn.port, ex->rma_conn.buf, ex->params.buf_len, &(ex->rma_conn.region));
 
   if (rc!=RMA2_SUCCESS) 
   { 
@@ -74,7 +74,7 @@ int extoll_client_disconnect(struct extoll_alloc *ex)
   RMA2_ERROR rc;
 
   printd("Unregister pages\n");
-  rc=rma2_unregister(ex->rma.port, ex->rma.region);
+  rc=rma2_unregister(ex->rma_conn.port, ex->rma_conn.region);
 
   if (rc!=RMA2_SUCCESS) 
   { 
@@ -83,7 +83,7 @@ int extoll_client_disconnect(struct extoll_alloc *ex)
   }
 
   printd("RMA2 disconnect\n");
-  rc=rma2_disconnect(ex->rma.port,ex->rma.handle);
+  rc=rma2_disconnect(ex->rma_conn.port,ex->rma_conn.handle);
 
   if (rc!=RMA2_SUCCESS) 
   { 
@@ -92,7 +92,7 @@ int extoll_client_disconnect(struct extoll_alloc *ex)
   }
 
   printf("Close the RMA port\n");
-  rc=rma2_close(ex->rma.port);
+  rc=rma2_close(ex->rma_conn.port);
 
   if (rc!=RMA2_SUCCESS) 
   { 

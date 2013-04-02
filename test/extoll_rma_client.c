@@ -146,7 +146,7 @@ static int one_sided_test()
   if (!(ex = setup(&params)))
     return -1;
 
-  uint32_t* buf_ptr = (uint32_t*)ex->rma.buf;
+  uint32_t* buf_ptr = (uint32_t*)ex->rma_conn.buf;
   for (i = 0; i < count; i++)
     buf_ptr[i] = 1234;
 

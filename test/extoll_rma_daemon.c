@@ -94,7 +94,7 @@ static int one_sided_test(void)
   if (!(ex = setup(&params)))
     return -1;
 
-  uint32_t* buf_ptr = (uint32_t*)ex->rma.buf;
+  uint32_t* buf_ptr = (uint32_t*)ex->rma_conn.buf;
   //Remember to memset using bytes
   memset(buf_ptr, 1234, size_B);
 

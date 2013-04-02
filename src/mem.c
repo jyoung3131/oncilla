@@ -250,6 +250,7 @@ inbound_thread(void *arg)
             if (--ret < 0)
                 break;
         } else if (msg.type == MSG_DO_ALLOC) {
+            #ifdef INFINIBAND
             /* First, send msg back to orig rank to unblock app, so it can
              * initiate connection to us. Then listen for connections.
              * XXX possible race condition
@@ -258,6 +259,15 @@ inbound_thread(void *arg)
             if (--ret < 0)
                 break;
             msg_recv_do_alloc(&msg); /* blocks */
+            #endif
+            #ifdef EXTOLL
+            /* EXTOLL server allocations are nonblocking and the call to
+             * alloc_ate should return the needed setup parameters for the client
+             * in msg.
+             */
+            msg_recv_do_alloc(&msg); /* should not block for EXTOLL setup */
+            ret = conn_put(conn, &msg, sizeof(msg));
+            #endif
         } else {
             printd("unhandled message %s\n", MSG_TYPE2STR(msg.type));
             BUG(1);
