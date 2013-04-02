@@ -56,7 +56,7 @@ struct lib_alloc {
 #ifdef CUDA
     struct {
       size_t bytes;
-      void *ptr;
+      void **ptr;
     } gpu;
 #endif
 
