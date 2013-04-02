@@ -189,7 +189,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   }
 
   //GPU allocation
-  alloc_params->kind = OCM_REMOTE_RDMA;
+  alloc_params->kind = OCM_LOCAL_GPU;
  
   gpu_alloc = ocm_alloc(alloc_params);
   if (!gpu_alloc) {
@@ -227,19 +227,19 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
     printf("ocm_copy from GPU to remote memory failed\n");
     return -1;
   }
-
+  
   // Host->host
   if(ocm_copy(local_alloc2, local_alloc, copy_params)){
     printf("ocm_copy from host to host failed\n");
     return -1;
   }
-
+  
   // Host->remote RDMA
   if(ocm_copy(remote_alloc, local_alloc, copy_params)){
     printf("ocm_copy from host to remote RDMA failed\n");
     return -1;
   }
-
+  
   // Host->GPU
   if(ocm_copy(gpu_alloc, local_alloc, copy_params)){
     printf("ocm_copy from host to GPU failed\n");
