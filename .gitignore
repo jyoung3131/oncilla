@@ -18,3 +18,4 @@ test/extoll_rma_daemon
 test/pmsg_client
 test/pmsg_daemon
 test/ocm_test
+doc

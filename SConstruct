@@ -18,11 +18,15 @@ Help("""
       Type: 'scons ' to build the optimized version,
             'scons -c' to clean the build directory,
             'scons debug=1' to build the debug version,
-            'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively
+            'scons timing=1' to enable timers for the optimized build,
+            'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively.
       """)
 
 gcc = 'clang'
 envcompilepath = ''
+#Disable GPU support by default
+cuda_flag = 0
+cuda_libs = ['']
 
 #Use this function to check and see if a particular application is installed
 def run(cmd, env):
@@ -33,6 +37,7 @@ def run(cmd, env):
     return code
   # Assumes that if a process doesn't call exit, it was successful
   return 0
+
 
 env = Environment()
 conf = Configure(env)
@@ -56,6 +61,11 @@ print 'Testing to see if clang is installed'
 if run('which clang', env):
   print 'clang not found - using gcc\n\n'
   gcc = 'gcc'
+
+print 'Testing to see if CUDA is installed'
+if not run('nvcc --version', env):
+  print 'CUDA found\n'
+  cuda_flag = 1
 env = conf.Finish()
 
 # C configuration environment
@@ -71,13 +81,25 @@ libflags = []
 #At some point we need to check on this...
 #ccflags.extend(['-fno-strict-aliasing'])
 
+if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
+   ccflags.extend(['-DTIMING'])
+
 if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])
    libflags.extend(['-ggdb','-O0'])
+   #Be careful using memcheck as it seems like it may affect some buffer used in the IB CM process.
+   #This error shows up as the IB client trying to finish a connection and failing.
+   #libs.append('mcheck')
 else:
    ccflags.extend(['-O2'])
    ccflags.extend(['-fno-strict-aliasing'])
-   libs.append('mcheck')
+
+#Specify if GPU support is available
+if cuda_flag == 1:
+  ccflags.extend(['-DCUDA'])
+  libpath.extend(['/usr/local/cuda/lib64'])
+  cpath.extend(['/usr/local/cuda/include'])
+  cuda_libs.extend(['cuda','cudart'])
 
 #Detect whether the user wants to compile with IB, EXTOLL, or all networks
 #available
@@ -114,7 +136,7 @@ else:
   libpath.extend(['/extoll2/lib'])
 
 #Add IB and EXTOLL libs (if defined)
-libs.extend([ib_libs,extoll_libs])
+libs.extend([ib_libs,extoll_libs,cuda_libs])
 
 env = Environment(CC = gcc, CCFLAGS = ccflags, CPPPATH = cpath)
 env.Append(LIBPATH = libpath, LIBFLAGS = libflags, LIBS = libs)
@@ -155,6 +177,6 @@ solib = env.SharedLibrary('lib/libocm.so', libfiles)
 
 #Export variables set in this file so they can be imported into the SConscript
 exp_env = Environment()
-Export('env', 'gcc','compilepath')
+Export('env','gcc','compilepath','libpath','libs')
 #Then call SConscript 
 SConscript(['test/SConscript'])

@@ -33,11 +33,8 @@ To clean:
 
 For an easy run (on octane*):
 
-    bin/$ ./launch
+    bin/oncillamem bin/nodefile
 
-Manually:
-
-    bin/$ mpiexec -np N -npernode 1 -hostfile $(pwd)/nodefile $(pwd)/oncillamem
 
 bin/nodefile should contain the DNS of each node this code will execute on, one
 per line. The first machine is where rank0 (the master) will be spawned.
@@ -45,12 +42,11 @@ per line. The first machine is where rank0 (the master) will be spawned.
 Edit bin/nodefile to list the machines on which the daemons should spawn so that
 bin/launch will spawn them appropriately.
 
-To enable debug/verbose output, define the environment variable 'OM_VERBOSE' to
+To enable debug/verbose output, define the environment variable 'OCM_VERBOSE' to
 be anything (the code just checks if it exists, not the value it is set to for
 now).
 
-    OM_VERBOSE=1 ./oncillamem
-    OM_VERBOSE=1 ./launch       MPI doesn't serialize printfs between ranks...
+    OCM_VERBOSE=1 ./oncillamem
 
 -- Using the API --
 

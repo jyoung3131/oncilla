@@ -1,15 +1,10 @@
-/* file: rdma_server.c
- * author: Alexander Merritt, merritt.alex@gatech.edu
- * desc: File taken from Adit Ranadive's commlib RDMA code and refactored for
- * OCM
+/* file: extoll_server.c
+ * author: Jeffrey Young, jyoung9@gatech.edu 
+ * desc: EXTOLL RMA2 server connect and teardown functions.
+ * 
  */
 
 /* System includes */
-#include <arpa/inet.h>
-#include <infiniband/arch.h>
-#include <infiniband/verbs.h>
-#include <netdb.h>
-#include <rdma/rdma_cma.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
