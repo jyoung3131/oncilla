@@ -182,6 +182,9 @@ __msg_req_alloc(struct message *msg)
     msg->status++;
 }
 
+///Sends a request message to rank 0 to find a node for an allocation,
+///then sends a subsquent message to rank N to request an allocation
+
 static int
 msg_send_req_alloc(struct message *msg)
 {
@@ -238,6 +241,9 @@ inbound_thread(void *arg)
         if (msg.type == MSG_ADD_NODE) {
             alloc_add_node(msg.rank, &msg.u.node.config);
         } else if (msg.type == MSG_REQ_ALLOC) {
+            //Currently only rank 0 can handle inital allocation request
+            //messages to determine the rank of the node that will fulfill
+            //the allocation
             BUG(myrank != 0);
             msg_recv_req_alloc(&msg);
             ret = conn_put(conn, &msg, sizeof(msg));
@@ -262,6 +268,10 @@ inbound_thread(void *arg)
     return NULL;
 }
 
+
+///listen_thread is spawned on each node from the mem_init call and it
+///creates a connection to a socket on the OCM port. It also spawns
+///inbound_thread to listen for new messages on this port
 static void *
 listen_thread(void *arg) /* persistent */
 {

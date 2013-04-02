@@ -134,6 +134,8 @@ launch_poll_thread(void)
     return 0;
 }
 
+///Each node notifies the master node that they have joined
+///the pool of available nodes
 static int
 notify_rank0(void)
 {
@@ -144,6 +146,7 @@ notify_rank0(void)
     msg.pid     = -1;               /* not used */
     memset(&msg.u.node.config, 0, sizeof(msg.u.node.config)); /* TODO */
     #ifdef INFINIBAND
+    //Find the IP address of this node's IB adapter
     if (ib_nic_ip(0, msg.u.node.config.ib_ip, HOST_NAME_MAX))
         return -1;
     #endif
