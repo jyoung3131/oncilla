@@ -189,7 +189,7 @@ ib_client_connect(struct ib_alloc *ib)
     ib->rdma.param.retry_count          = 10;
     //ib->rdma.param.rnr_retry_count      = 10;
 
-    printd("connecting to server\n");
+    printd("Connecting to server with rdma_connect\n");
     if (rdma_connect(ib->rdma.id, &ib->rdma.param))
         return -1;
 
@@ -207,8 +207,12 @@ ib_client_connect(struct ib_alloc *ib)
     TIMER_START(ib_total_client_conn_timer);
     #endif
 
+    printd("Checking with server to make sure connection establisted\n");
     if (ib->rdma.evt->event != RDMA_CM_EVENT_ESTABLISHED)
+    {
+        printf("ib_client_connect:: RDMA event returned error code %d\n", ib->rdma.evt->event);
         return -1;
+    }
 
     struct __pdata_t pdata;
     memcpy(&pdata, ib->rdma.evt->param.conn.private_data, sizeof(pdata));
@@ -219,7 +223,10 @@ ib_client_connect(struct ib_alloc *ib)
             ib->ibv.buf_rkey, ib->ibv.buf_va, ib->ibv.buf_len);
 
     rdma_ack_cm_event(ib->rdma.evt);
-
+    #ifdef TIMING
+    TIMER_END(ib_total_client_conn_timer, ib_total_conn_ns);
+    ib_total_conn_ns_sum+= ib_total_conn_ns;
+    #endif
     //print all timer results here
     #ifdef TIMING
     printf("[CONNECT] Time for ibv_reg_mr: %lu ns \n"

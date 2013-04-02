@@ -41,6 +41,8 @@ struct ocm_params
 {
     uint64_t src_offset;  
     uint64_t dest_offset;
+    uint64_t src_offset_2;  
+    uint64_t dest_offset_2;
     uint64_t bytes;
     //read = 0, write = 1
     int op_flag;

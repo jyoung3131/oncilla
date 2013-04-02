@@ -54,7 +54,7 @@
         fflush(stderr);                                 \
     } while(0)
 
-/* debug printing. will only print if env var OM_VERBOSE is defined */
+/* debug printing. will only print if env var OCM_VERBOSE is defined */
 #define printd(fmt, args...)                                            \
     do {                                                                \
         if(__DEBUG_ENABLED) {                                           \

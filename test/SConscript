@@ -28,7 +28,9 @@ if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-pl
 
 if int(ARGUMENTS.get('debug', 0)): # 
     ccflags.append(['-ggdb', '-O0'])
-    libs.append('mcheck')
+    #Be careful using memcheck as it seems like it may affect some buffer used in the IB CM process.
+    #This error shows up as the IB client trying to finish a connection and failing.
+    #libs.append('mcheck')
 else:
     ccflags.extend(['-O2'])
 
