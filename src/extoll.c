@@ -1,6 +1,6 @@
-/* file: rdma.c
- * author: Alexander Merritt, merritt.alex@gatech.edu
- * desc: InfiniBand RDMA helper functions and threading code
+/* file: extoll.c
+ * author: Jeff Young <jyoung9@gatech.edu>
+ * desc: EXTOLL RMA2 helper functions
  *
  * The list of allocs in this file will either be all server-side if the process
  * is a daemon, or all client-side if the process is the application (i.e. this
@@ -8,21 +8,12 @@
  */
 
 /* System includes */
-#include <arpa/inet.h>
-#include <infiniband/arch.h>
-#include <infiniband/verbs.h>
-#include <netdb.h>
-#include <rdma/rdma_cma.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <limits.h>
-/* for ib_nic_ip */
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <net/if.h>
 
 /* Project includes */
 #include <util/list.h>

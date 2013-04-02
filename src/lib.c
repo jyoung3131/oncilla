@@ -432,12 +432,14 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     {
       cudaMemcpy(dest->u.local.ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
     }
+    #ifdef INFINIBAND
     else if(dest->kind == OCM_REMOTE_RDMA)
     {
       cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
       ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 
     }
+    #endif
     else
     {
       BUG(1);

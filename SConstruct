@@ -177,6 +177,6 @@ solib = env.SharedLibrary('lib/libocm.so', libfiles)
 
 #Export variables set in this file so they can be imported into the SConscript
 exp_env = Environment()
-Export('env', 'gcc','compilepath')
+Export('env','gcc','compilepath','libpath','libs')
 #Then call SConscript 
 SConscript(['test/SConscript'])

@@ -1,18 +1,13 @@
-/* file: rdma_client.c
- * author: Alexander Merritt, merritt.alex@gatech.edu
- * desc: File taken from Adit Ranadive's commlib RDMA code and refactored for
- * OCM
+/* file: extoll_client.c
+ * author: Jeff Young, jyoung9@gatech.edu
+ * desc: EXTOLL RMA2 client setup and teardown
+ * 
  */
 
 /* System includes */
 #define _GNU_SOURCE /* for asprintf */
 #include <stdio.h>
 
-#include <arpa/inet.h>
-#include <infiniband/arch.h>
-#include <infiniband/verbs.h>
-#include <netdb.h>
-#include <rdma/rdma_cma.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
