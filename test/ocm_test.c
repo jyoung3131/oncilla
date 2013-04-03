@@ -4,6 +4,11 @@
 #include <oncillamem.h>
 #include <math.h>
 
+//Needed to explicitly close EXTOLL connections
+#include <io/extoll.h>
+#include "../src/extoll.h"
+
+
 static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B){
   ocm_alloc_t a;
   void *buf;
@@ -60,6 +65,15 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   }
 
   free(alloc_params);
+
+  //**** For EXTOLL we must actively kill the client process
+  //to avoid leaving any pinned pages around
+  if(suboption == 4)
+  {
+    if(ocm_extoll_disconnect(a))
+      goto fail;
+
+  }
 
   if (0 > ocm_tini()) {
     printf("ocm_tini failed\n");

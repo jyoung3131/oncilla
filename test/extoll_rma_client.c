@@ -36,7 +36,7 @@ static int teardown(extoll_t ex)
   if (extoll_disconnect(ex, false/*is client*/))
     ret = 1;
 
-  //Free the IB structure
+  //Free the EXTOLL structure
   if(extoll_free(ex))
     ret = -1;
 

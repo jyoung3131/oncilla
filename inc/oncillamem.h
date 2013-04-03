@@ -71,6 +71,7 @@ int ocm_init(void);
 int ocm_tini(void);
 ocm_alloc_t ocm_alloc(ocm_alloc_param_t alloc_param);
 int ocm_free(ocm_alloc_t a);
+int ocm_extoll_disconnect(ocm_alloc_t a);
 
 /* get pointer to local buffer */
 int ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len);

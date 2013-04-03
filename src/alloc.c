@@ -178,6 +178,7 @@ alloc_ate(struct alloc_ation *alloc)
         alloc->u.rma.node_id = ex->params.dest_node;
         alloc->u.rma.vpid = ex->params.dest_vpid;
         alloc->u.rma.dest_nla = ex->params.dest_nla;
+        alloc->u.rma.ex_temp = ex;
    
     }
     #endif

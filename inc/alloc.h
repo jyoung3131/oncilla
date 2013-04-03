@@ -77,6 +77,9 @@ struct alloc_ation
           RMA2_Nodeid node_id; //uint16_t
           RMA2_VPID vpid;    //uint16_t
           RMA2_NLA dest_nla; //uint64_t
+          //Temp EXTOLL object used to help close server. Remove
+          //once the free path is written
+          extoll_t ex_temp;
         } rma;
         struct {
             /* RDMA CM needs these */
