@@ -63,6 +63,24 @@ int extoll_server_connect(struct extoll_alloc *ex)
   if (rc!=RMA2_SUCCESS)
   {
     fprintf(stderr,"RMA open failed (%d)\n",rc);
+ 
+    if(rc== RMA2_ERR_IOCTL)
+            fprintf(stderr, "Error while communicating with the EXTOLL device driver\n");    
+    else if(rc==RMA2_ERR_MMAP)
+            fprintf(stderr, "error while trying to mmap dma memory\n");
+//    else if(rc==RMA2_ERROR)
+  //          fprintf(stderr,"internal error\n");
+    else if(rc==RMA2_ERR_NO_DEVICE)
+            fprintf(stderr,"no Extoll device found\n");
+    else if(rc==RMA2_ERR_PORTS_USED)
+            fprintf(stderr,"all endpoint are in use\n");
+    else if(rc==RMA2_ERR_FD)
+            fprintf(stderr,"opening of /dev/rma2 failed\n");
+    else if(rc==RMA2_ERR_INVALID_VERSION)
+            fprintf(stderr,"device driver version and API version do not match\n");
+    else{
+	    fprintf(stderr, "internal error\n");
+	}   
     return -1;
   }
 
@@ -84,7 +102,25 @@ int extoll_server_connect(struct extoll_alloc *ex)
 
   if (rc!=RMA2_SUCCESS)
   {
-    fprintf(stderr,"Error while registering memory. Bailing out!\n");
+    fprintf(stderr,"RMA open failed (%d)\n",rc);
+ 
+    if(rc== RMA2_ERR_IOCTL)
+            fprintf(stderr, "Error while communicating with the EXTOLL device driver\n");    
+    else if(rc==RMA2_ERR_MMAP)
+            fprintf(stderr, "error while trying to mmap dma memory\n");
+//    else if(rc==RMA2_ERROR)
+  //          fprintf(stderr,"internal error\n");
+    else if(rc==RMA2_ERR_NO_DEVICE)
+            fprintf(stderr,"no Extoll device found\n");
+    else if(rc==RMA2_ERR_PORTS_USED)
+            fprintf(stderr,"all endpoint are in use\n");
+    else if(rc==RMA2_ERR_FD)
+            fprintf(stderr,"opening of /dev/rma2 failed\n");
+    else if(rc==RMA2_ERR_INVALID_VERSION)
+            fprintf(stderr,"device driver version and API version do not match\n");
+    else{
+	    fprintf(stderr, "internal error\n");
+	}   
     return -1;
   }
 

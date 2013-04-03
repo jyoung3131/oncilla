@@ -231,7 +231,7 @@ usage:
 
   if(reg_size_MB > 4000.0)
   {
-    printf("Please pass a data size of less than 8000 MB\n");
+    printf("Please pass a data size of less than 4000 MB\n");
     return -1;
   }
 

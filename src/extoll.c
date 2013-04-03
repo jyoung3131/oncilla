@@ -83,7 +83,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
       for(i = 0; ((i < num_notis) && (!last_transfer_flag)); i++)
       {
         //Check first for the last transfer (one smaller than 8 MB)
-        if(len < max_num_B_per_call)
+        if(len <= max_num_B_per_call)
         {
           if(len == 0)
           {
@@ -112,7 +112,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
 
         printd("Num B left %lu i %d num_notis %d\n",len, i, num_notis);
         //Check first for the last transfer (one smaller than 8 MB)
-        if(len < max_num_B_per_call)
+        if(len <= max_num_B_per_call)
         {
           if(len == 0)
           {
