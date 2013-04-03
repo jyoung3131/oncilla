@@ -24,6 +24,7 @@
 
 /* Directory includes */
 #include "extoll.h"
+
 /* Globals */
 
 /* Internal definitions */

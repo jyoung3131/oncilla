@@ -48,14 +48,14 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     return -1;
   }
 
-  if(suboption != 4)
+  //Check to see if we can access a local buffer endpoint
+  if (ocm_localbuf(a, &buf, &buf_len)) 
   {
-  if (ocm_localbuf(a, &buf, &buf_len)) {
     printf("ocm_localbuf failed\n");
     goto fail;
   }
   printf("local buffer size %lu @ %p\n", buf_len, buf);
-  }
+
   if (ocm_is_remote(a)) {
     if (!ocm_remote_sz(a, &remote_len)) {
       printf("alloc is remote; size = %lu\n", remote_len);
@@ -296,7 +296,7 @@ usage:
         " <allocation size 2 in MB (alloc2)>\n "
 	"\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
 	"\tSuboptions: 1=allocate IB buffer (alloc1-local, alloc2-remote); 2=allocate GPU memory\n"
-	" \t\t    3=allocate host memory\n", argv[0]);
+	" \t\t    3=allocate host memory; 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n", argv[0]);
     return -1;
   }
 

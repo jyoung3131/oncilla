@@ -24,6 +24,10 @@
 #include <cuda_runtime.h> 
 #endif
 
+#ifdef EXTOLL
+#include "extoll.h"
+#endif
+
 /* Globals */
 
 /* Internal definitions */
@@ -302,7 +306,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
       goto out;
 
     //Once the connection is complete the buffer is allocated
-    //(char*)alloc->u.rma.local_ptr = (char*)alloc->u.rma.ex->rma_conn.buf;
+    alloc->u.rma.local_ptr = alloc->u.rma.ex->rma_conn.buf;
 
     printd("adding new alloc to list\n");
     lock_allocs();
