@@ -47,7 +47,7 @@ static int teardown(extoll_t ex)
   printf("[DISCONNECT] Time for extoll_disconnect: %lu ns\n", extoll_teardown_ns);
 #endif
 
-  //Free the IB structure
+  //Free the EXTOLL structure
   if(extoll_free(ex))
     ret = -1;
 

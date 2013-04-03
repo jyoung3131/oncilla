@@ -267,6 +267,9 @@ inbound_thread(void *arg)
              */
             msg_recv_do_alloc(&msg); /* should not block for EXTOLL setup */
             ret = conn_put(conn, &msg, sizeof(msg));
+            //TODO - this code helps to close the server properly, but it should be
+            //replaced once the free path is written 
+            extoll_notification(msg.u.alloc.u.rma.ex_temp);
             #endif
         } else {
             printd("unhandled message %s\n", MSG_TYPE2STR(msg.type));

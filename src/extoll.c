@@ -239,6 +239,8 @@ void extoll_notification(extoll_t ex)
   //TODO - fix the RMA free path so that we don't need to call 
   //the disconnect function here
   extoll_server_disconnect((struct extoll_alloc*)ex);
+  //Pass a Ctrl-C so that the main daemon (in src/main.c) will also be terminated)
+  raise(SIGINT);
 }
 
 //Close down the EXTOLL server and client applications

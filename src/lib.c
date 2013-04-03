@@ -24,6 +24,10 @@
 #include <cuda_runtime.h> 
 #endif
 
+#ifdef EXTOLL
+#include "extoll.h"
+#endif
+
 /* Globals */
 
 /* Internal definitions */
@@ -151,6 +155,18 @@ ocm_tini(void)
 out:
   printd("detach from daemon: %s\n", (ret ? "fail" : "success"));
   return ret;
+}
+
+int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
+{
+  if (extoll_disconnect(extoll_alloc->u.rma.ex, false/*is client*/))
+    return -1;
+
+  //Free the EXTOLL structure
+  if(extoll_free(extoll_alloc->u.rma.ex))
+    return -1;
+
+  return 0;
 }
 
   ocm_alloc_t
@@ -288,9 +304,9 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 
     if (extoll_connect(alloc->u.rma.ex, false))
       goto out;
-  
+
     //Once the connection is complete the buffer is allocated
-    //(char*)alloc->u.rma.local_ptr = (char*)alloc->u.rma.ex->rma_conn.buf;
+    alloc->u.rma.local_ptr = alloc->u.rma.ex->rma_conn.buf;
 
     printd("adding new alloc to list\n");
     lock_allocs();
@@ -467,14 +483,14 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     {
       cudaMemcpy(dest->u.local.ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
     }
-    #ifdef INFINIBAND
+#ifdef INFINIBAND
     else if(dest->kind == OCM_REMOTE_RDMA)
     {
       cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
       ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 
     }
-    #endif
+#endif
     else
     {
       BUG(1);
