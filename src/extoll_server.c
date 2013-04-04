@@ -159,7 +159,9 @@ void extoll_server_notification(struct extoll_alloc *ex)
       continue;
     }
 #ifdef __DEBUG_ENABLED
+#ifndef TIMING
     rma2_noti_dump(ex->rma_conn.notification);
+#endif
 #endif
     rma2_noti_free(ex->rma_conn.port,ex->rma_conn.notification);
     printd("\n\nContent !=0:\n\n");
