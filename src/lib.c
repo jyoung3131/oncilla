@@ -441,6 +441,15 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
       ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
     }
 #endif
+#ifdef EXTOLL
+    else if(dest->kind == OCM_REMOTE_RMA)
+    {
+      //Do a memcpy to the local buffer and then write to the remote
+      //IB buffer
+      memcpy(dest->u.rma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
+      extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
+    }
+#endif
 #ifdef CUDA
     else if(dest->kind == OCM_LOCAL_GPU)
     {
@@ -467,6 +476,29 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     {
       ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
       cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rdma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
+    }
+#endif
+    else
+    {
+      BUG(1);
+    }
+  }
+#endif
+#ifdef EXTOLL
+  else if (src->kind == OCM_REMOTE_RMA)
+  {
+    //Do a read from the remote IB buffer and then memcpy to the local buffer
+    if(dest->kind == OCM_LOCAL_HOST)
+    {
+      extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
+      memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rma.local_ptr+cp_param->src_offset, cp_param->bytes);
+
+    }
+#ifdef CUDA
+    else if(dest->kind == OCM_LOCAL_GPU)
+    {
+      extoll_read(src->u.rma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
+      cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
     }
 #endif
     else
@@ -532,6 +564,29 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
   else
   {
     if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+    {
+      printf("read failed\n");
+      return -1;
+    }
+  }
+  return 0;
+#endif
+#ifdef EXTOLL
+  if(cp_param->bytes > src->u.rma.local_bytes)
+    return -1;
+
+  if (cp_param->op_flag)
+  {
+
+    if(extoll_write(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+    {
+      printf("write failed\n");
+      return -1;
+    }
+  }
+  else
+  {
+    if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
     {
       printf("read failed\n");
       return -1;
