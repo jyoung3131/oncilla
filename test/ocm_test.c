@@ -183,7 +183,10 @@ fail:
 }
 
 static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
-  ocm_alloc_t local_alloc, /*gpu_alloc,*/ remote_alloc, local_alloc2;
+  ocm_alloc_t local_alloc, remote_alloc, local_alloc2;
+  #ifdef CUDA
+  ocm_alloc_t gpu_alloc;
+  #endif
 //  void *buf;
 //  size_t buf_len, remote_len;
   ocm_alloc_param_t alloc_params;
@@ -245,7 +248,8 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   copy_params->dest_offset = 0;
   copy_params->bytes = local_size_B;
   copy_params->op_flag = 1;
-  
+ 
+  #ifdef CUDA 
   // GPU->host
   if(ocm_copy(local_alloc, gpu_alloc, copy_params)){
     printf("ocm_copy from GPU to host memory failed\n");
@@ -257,6 +261,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
     printf("ocm_copy from GPU to remote memory failed\n");
     return -1;
   }
+  #endif
   // Host->host
   if(ocm_copy(local_alloc2, local_alloc, copy_params)){
     printf("ocm_copy from host to host failed\n");
@@ -268,21 +273,25 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
     printf("ocm_copy from host to remote failed\n");
     return -1;
   }
+  #ifdef CUDA
   // Host->GPU
   if(ocm_copy(gpu_alloc, local_alloc, copy_params)){
     printf("ocm_copy from host to GPU failed\n");
     return -1;
   }
+  #endif
   // remote->host
   if(ocm_copy(local_alloc,remote_alloc, copy_params)){
     printf("ocm_copy from remote to local failed\n");
     return -1;
   }
+  #ifdef CUDA
   // remote->GPU
   if(ocm_copy(gpu_alloc, remote_alloc, copy_params)){
     printf("ocm_copy from remote RMDA to GPU failed\n");
     return -1;
   }
+  #endif
   return 0;
 }
 
