@@ -159,12 +159,14 @@ out:
 
 int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
 {
+#ifdef EXTOLL
   if (extoll_disconnect(extoll_alloc->u.rma.ex, false/*is client*/))
     return -1;
 
   //Free the EXTOLL structure
   if(extoll_free(extoll_alloc->u.rma.ex))
     return -1;
+#endif
 
   return 0;
 }

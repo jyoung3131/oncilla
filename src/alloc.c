@@ -23,7 +23,9 @@
 #include <nodefile.h>
 
 /* Directory includes */
+#ifdef EXTOLL
 #include "extoll.h"
+#endif
 
 /* Globals */
 

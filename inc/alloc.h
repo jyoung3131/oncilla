@@ -73,6 +73,7 @@ struct alloc_ation
     size_t bytes;
 
     union {
+        #ifdef EXTOLL
         struct {
           RMA2_Nodeid node_id; //uint16_t
           RMA2_VPID vpid;    //uint16_t
@@ -81,6 +82,7 @@ struct alloc_ation
           //once the free path is written
           extoll_t ex_temp;
         } rma;
+        #endif
         struct {
             /* RDMA CM needs these */
             char ib_ip[HOST_NAME_MAX];

@@ -5,8 +5,10 @@
 #include <math.h>
 
 //Needed to explicitly close EXTOLL connections
+#ifdef EXTOLL
 #include <io/extoll.h>
 #include "../src/extoll.h"
+#endif
 
 
 static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B){
