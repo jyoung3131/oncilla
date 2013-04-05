@@ -48,7 +48,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
   uint32_t i;
   //**NOTE: This command can transfer up to 8 MB at once, so larger transfers must be broken down into smaller transfers
   //For the last transfer we may need to transfer a small amount of data for the second put/get
-  uint64_t max_num_B_per_call = 8*(2<<20);
+  uint64_t max_num_B_per_call = 8*(1<<20);
 
   uint32_t last_transfer_flag = 0;
   uint32_t last_num_transfers = 0;
@@ -83,7 +83,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
       for(i = 0; ((i < num_notis) && (!last_transfer_flag)); i++)
       {
         //Check first for the last transfer (one smaller than 8 MB)
-        if(len < max_num_B_per_call)
+        if(len <= max_num_B_per_call)
         {
           if(len == 0)
           {
@@ -112,7 +112,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
 
         printd("Num B left %lu i %d num_notis %d\n",len, i, num_notis);
         //Check first for the last transfer (one smaller than 8 MB)
-        if(len < max_num_B_per_call)
+        if(len <= max_num_B_per_call)
         {
           if(len == 0)
           {
