@@ -103,6 +103,7 @@ int extoll_client_disconnect(struct extoll_alloc *ex)
 
   #ifdef TIMING
     uint64_t disconnect_ns = 0;
+    uint64_t unregister_ns = 0;
     uint64_t rma_close_ns = 0;
   #endif
 
@@ -118,7 +119,10 @@ int extoll_client_disconnect(struct extoll_alloc *ex)
     return -1;
   }
   
+  TIMER_START(teardown_timer);
   rc=rma2_unregister(ex->rma_conn.port, ex->rma_conn.region);
+  TIMER_END(teardown_timer, unregister_ns);
+  TIMER_CLEAR(teardown_timer);
 
   if (rc!=RMA2_SUCCESS) 
   { 
@@ -140,7 +144,7 @@ int extoll_client_disconnect(struct extoll_alloc *ex)
   }
 
   #ifdef TIMING
-    printf("[DISCONNECT] Disconnect: %lu ns, rma2_close: %lu ns, Total Teardown: %lu ns\n", disconnect_ns, rma_close_ns, disconnect_ns + rma_close_ns);
+    printf("[DISCONNECT] Disconnect: %lu ns, Unregister: %lu ns, rma2_close: %lu ns, Total Teardown: %lu ns\n", disconnect_ns, unregister_ns, rma_close_ns, unregister_ns + rma_close_ns);
   #endif
 
   //Free the memory region and associated buffer
