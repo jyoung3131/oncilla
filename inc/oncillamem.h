@@ -78,6 +78,8 @@ int ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len);
 
 bool ocm_is_remote(ocm_alloc_t a);
 
+enum ocm_kind ocm_alloc_kind(ocm_alloc_t a);
+
 /* get size of remote buffer */
 int ocm_remote_sz(ocm_alloc_t a, size_t *len);
 
