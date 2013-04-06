@@ -169,6 +169,12 @@ int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
 	return 0;
 }
 
+//Public access function to return the type of an allocation
+enum ocm_kind ocm_alloc_kind(ocm_alloc_t alloc)
+{
+	return alloc->kind;
+}
+
 	ocm_alloc_t
 ocm_alloc(ocm_alloc_param_t alloc_param)
 {
