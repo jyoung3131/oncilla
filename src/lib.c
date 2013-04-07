@@ -67,7 +67,7 @@ struct lib_alloc {
 #ifdef CUDA
 		struct {
 			size_t bytes;
-			void **cuda_ptr;
+			void *cuda_ptr;
 		} gpu;
 #endif
 	} u;
@@ -160,12 +160,12 @@ out:
 int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
 {
 #ifdef EXTOLL
-  if (extoll_disconnect(extoll_alloc->u.rma.ex, false/*is client*/))
-    return -1;
+	if (extoll_disconnect(extoll_alloc->u.rma.ex, false/*is client*/))
+		return -1;
 
-  //Free the EXTOLL structure
-  if(extoll_free(extoll_alloc->u.rma.ex))
-    return -1;
+	//Free the EXTOLL structure
+	if(extoll_free(extoll_alloc->u.rma.ex))
+		return -1;
 #endif
 
 	return 0;
@@ -234,20 +234,20 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 #ifdef CUDA
 	else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
 		printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
-		
+
 		INIT_LIST_HEAD(&alloc->link);
 		alloc->kind             = OCM_LOCAL_GPU;
 		alloc->u.gpu.bytes    = msg.u.alloc.bytes;
 
-    alloc->u.gpu.cuda_ptr = NULL;
-  
-    cudaError_t cudaErr = cudaMalloc(alloc->u.gpu.cuda_ptr, sizeof(void**)*msg.u.alloc.bytes);
+		alloc->u.gpu.cuda_ptr = NULL;
+
+		cudaError_t cudaErr = cudaMalloc((void**)&(alloc->u.gpu.cuda_ptr), msg.u.alloc.bytes);
 		if (cudaErr != 0)
 		{
 			printd("CUDA malloc error was %d \n", cudaErr);
 			goto out;
 		}
-		
+
 		printd("adding new alloc to list\n");
 		lock_allocs();
 		list_add(&alloc->link, &allocs);
@@ -333,7 +333,6 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 		unlock_allocs();
 	}
 #endif
-
 	else {
 		BUG(1);
 	}
@@ -357,7 +356,7 @@ ocm_free(ocm_alloc_t a)
 		free(a->u.local.ptr);
 	}
 #ifdef CUDA
-  else if (a->kind == OCM_LOCAL_GPU) {
+	else if (a->kind == OCM_LOCAL_GPU) {
 		cudaFree(a->u.gpu.cuda_ptr);
 	}
 #endif
@@ -377,8 +376,8 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 		*len = a->u.local.bytes;
 	}
 #ifdef CUDA
-  else if (a->kind == OCM_LOCAL_GPU) {
-		buf = a->u.gpu.cuda_ptr;
+	else if (a->kind == OCM_LOCAL_GPU) {
+		*buf = a->u.gpu.cuda_ptr;
 		*len = a->u.gpu.bytes;
 	}
 #endif
@@ -474,13 +473,13 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 		}
 #endif
 #ifdef EXTOLL
-    else if(dest->kind == OCM_REMOTE_RMA)
-    {
-      //Do a memcpy to the local buffer and then write to the remote
-      //IB buffer
-      memcpy(dest->u.rma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
-      extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
-    }
+		else if(dest->kind == OCM_REMOTE_RMA)
+		{
+			//Do a memcpy to the local buffer and then write to the remote
+			//IB buffer
+			memcpy(dest->u.rma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
+			extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
+		}
 #endif
 #ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
@@ -517,27 +516,27 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 	}
 #endif
 #ifdef EXTOLL
-  else if (src->kind == OCM_REMOTE_RMA)
-  {
-    //Do a read from the remote IB buffer and then memcpy to the local buffer
-    if(dest->kind == OCM_LOCAL_HOST)
-    {
-      extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
-      memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rma.local_ptr+cp_param->src_offset, cp_param->bytes);
+	else if (src->kind == OCM_REMOTE_RMA)
+	{
+		//Do a read from the remote IB buffer and then memcpy to the local buffer
+		if(dest->kind == OCM_LOCAL_HOST)
+		{
+			extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
+			memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
-    }
+		}
 #ifdef CUDA
-    else if(dest->kind == OCM_LOCAL_GPU)
-    {
-      extoll_read(src->u.rma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
-      cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
-    }
+		else if(dest->kind == OCM_LOCAL_GPU)
+		{
+			extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
+			cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
+		}
 #endif
-    else
-    {
-      BUG(1);
-    }
-  }
+		else
+		{
+			BUG(1);
+		}
+	}
 #endif
 #ifdef CUDA
 	else if (src->kind == OCM_LOCAL_GPU)
@@ -604,27 +603,27 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 	return 0;
 #endif
 #ifdef EXTOLL
-  if(cp_param->bytes > src->u.rma.local_bytes)
-    return -1;
+	if(cp_param->bytes > src->u.rma.local_bytes)
+		return -1;
 
-  if (cp_param->op_flag)
-  {
+	if (cp_param->op_flag)
+	{
 
-    if(extoll_write(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
-    {
-      printf("write failed\n");
-      return -1;
-    }
-  }
-  else
-  {
-    if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
-    {
-      printf("read failed\n");
-      return -1;
-    }
-  }
-  return 0;
+		if(extoll_write(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+		{
+			printf("write failed\n");
+			return -1;
+		}
+	}
+	else
+	{
+		if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+		{
+			printf("read failed\n");
+			return -1;
+		}
+	}
+	return 0;
 #endif
 
 	return -1;

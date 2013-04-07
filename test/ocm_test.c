@@ -80,7 +80,6 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   {
     if(ocm_extoll_disconnect(a))
       goto fail;
-
   }
 
   if (0 > ocm_tini()) {
