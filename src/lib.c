@@ -234,11 +234,24 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 #ifdef CUDA
 	else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
 		printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
+		
+		INIT_LIST_HEAD(&alloc->link);
 		alloc->kind             = OCM_LOCAL_GPU;
 		alloc->u.gpu.bytes    = msg.u.alloc.bytes;
-		cudaMalloc(alloc->u.gpu.cuda_ptr, msg.u.alloc.bytes);
-		if (!alloc->u.gpu.cuda_ptr)
+
+    alloc->u.gpu.cuda_ptr = NULL;
+  
+    cudaError_t cudaErr = cudaMalloc(alloc->u.gpu.cuda_ptr, sizeof(void**)*msg.u.alloc.bytes);
+		if (cudaErr != 0)
+		{
+			printd("CUDA malloc error was %d \n", cudaErr);
 			goto out;
+		}
+		
+		printd("adding new alloc to list\n");
+		lock_allocs();
+		list_add(&alloc->link, &allocs);
+		unlock_allocs();
 	}
 
 #endif
@@ -344,7 +357,7 @@ ocm_free(ocm_alloc_t a)
 		free(a->u.local.ptr);
 	}
 #ifdef CUDA
-	if (a->kind == OCM_LOCAL_GPU) {
+  else if (a->kind == OCM_LOCAL_GPU) {
 		cudaFree(a->u.gpu.cuda_ptr);
 	}
 #endif
@@ -364,7 +377,7 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
 		*len = a->u.local.bytes;
 	}
 #ifdef CUDA
-	if (a->kind == OCM_LOCAL_GPU) {
+  else if (a->kind == OCM_LOCAL_GPU) {
 		buf = a->u.gpu.cuda_ptr;
 		*len = a->u.gpu.bytes;
 	}
