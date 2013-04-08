@@ -73,7 +73,10 @@ parse_nodefile(const char *path, int *_myrank /* out */)
         if (0 == strncmp(node_file[rank].dns, buf, HOST_NAME_MAX))
             break;
     if (rank < 0)
+    {
+	printf("Couldn't find hostname listed in file on accessible systems\n");
         goto out;
+    }
     *_myrank = rank;
 
     node_file_entries = entries;

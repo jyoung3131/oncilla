@@ -13,14 +13,19 @@
 #include <unistd.h>
 
 /* Other project includes */
+#include <sys/sysinfo.h>
 
 /* Project includes */
 #include <alloc.h>
 #include <debug.h>
 #include <util/list.h>
+#include <util/mem.h>
 #include <nodefile.h>
 
 /* Directory includes */
+#ifdef EXTOLL
+#include "extoll.h"
+#endif
 
 /* Globals */
 
@@ -73,10 +78,18 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 
     alloc->orig_rank    = req->orig_rank;
     alloc->type         = req->type;
+    //Check to make sure the request is not greater than free memory
+    /*if(req->bytes >= get_free_mem())
+      BUG(1);
+    */
+
     alloc->bytes        = req->bytes; /* TODO validate size will fit on node */
 
-    if (req->type == ALLOC_MEM_HOST)
+    if ((req->type == ALLOC_MEM_HOST) || (req->type == ALLOC_MEM_GPU))
+    {
         alloc->remote_rank = req->orig_rank;
+        printd("Host or local GPU: req orig rank %d, alloc rank %d\n",req->orig_rank, alloc->remote_rank);
+    }
 
     #ifdef INFINIBAND
     else if (req->type == ALLOC_MEM_RDMA) {
@@ -93,8 +106,11 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
     
     #ifdef EXTOLL
     else if (req->type == ALLOC_MEM_RMA) {
+        printd("req orig rank %d, num nodes %d\n",
+        req->orig_rank, node_file_entries);
+                 alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
         node = &node_file[alloc->remote_rank];
-        BUG(1); /* TODO */
+        printd("alloc: rma on rank %d\n", alloc->remote_rank);
     }
     #endif
 
@@ -151,11 +167,32 @@ alloc_ate(struct alloc_ation *alloc)
 
     #ifdef EXTOLL
     else if (alloc->type == ALLOC_MEM_RMA) {
-        BUG(1);
+        extoll_t ex;
+        
+        struct extoll_params p;
+        p.buf_len   = alloc->bytes;
+        //We don't need to allocate the buffer since connect does this
+        //for us
+        ABORT2(!p.buf);
+        if (!(ex = extoll_new(&p)))
+            ABORT();
+        printd("EXTOLL: setting up server connection\n");
+        if (extoll_connect(ex, true))
+            ABORT();
+
+        printd("EXTOLL parameters for the server are NodeID: %d VPID: %d and NLA %lx\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
+        //Save these parameters into the allocation struct so they get passed back in the return message to the client
+        alloc->u.rma.node_id = ex->params.dest_node;
+        alloc->u.rma.vpid = ex->params.dest_vpid;
+        alloc->u.rma.dest_nla = ex->params.dest_nla;
+        alloc->u.rma.ex_temp = ex;
+   
     }
     #endif
     #ifdef CUDA
-    else if (alloc->type == ALLOC_MEM_GPU){
+    else if (alloc->type == ALLOC_MEM_GPU)
+    {
+      printf("Remote CUDA allocations not supported!\n");
     }
     #endif
     else {

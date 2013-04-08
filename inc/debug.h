@@ -17,6 +17,8 @@
 /* Project includes */
 #include <util/compiler.h>
 
+//To use these debugs functions pass 'OCM_VERBOSE=1' before your
+//executable and any arguments
 #define __DEBUG_ENABLED     (getenv("OCM_VERBOSE"))
 
 /**
