@@ -201,7 +201,7 @@ msg_send_req_alloc(struct message *msg)
         goto out;
 
     printd("got alloc type %d\n", msg->u.alloc.type);
-    if (msg->u.alloc.type != ALLOC_MEM_HOST) {
+    if ((msg->u.alloc.type != ALLOC_MEM_HOST) && (msg->u.alloc.type != ALLOC_MEM_GPU)) {
         msg->type   = MSG_DO_ALLOC;
         msg->status = MSG_REQUEST;
         /* TODO support multiple allocs across nodes here */

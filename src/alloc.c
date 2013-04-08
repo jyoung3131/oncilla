@@ -23,7 +23,9 @@
 #include <nodefile.h>
 
 /* Directory includes */
+#ifdef EXTOLL
 #include "extoll.h"
+#endif
 
 /* Globals */
 
@@ -77,13 +79,17 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
     alloc->orig_rank    = req->orig_rank;
     alloc->type         = req->type;
     //Check to make sure the request is not greater than free memory
-    if(req->bytes >= get_free_mem())
+    /*if(req->bytes >= get_free_mem())
       BUG(1);
-    
+    */
+
     alloc->bytes        = req->bytes; /* TODO validate size will fit on node */
 
-    if (req->type == ALLOC_MEM_HOST)
+    if ((req->type == ALLOC_MEM_HOST) || (req->type == ALLOC_MEM_GPU))
+    {
         alloc->remote_rank = req->orig_rank;
+        printd("Host or local GPU: req orig rank %d, alloc rank %d\n",req->orig_rank, alloc->remote_rank);
+    }
 
     #ifdef INFINIBAND
     else if (req->type == ALLOC_MEM_RDMA) {
@@ -184,7 +190,9 @@ alloc_ate(struct alloc_ation *alloc)
     }
     #endif
     #ifdef CUDA
-    if (alloc->type == ALLOC_MEM_GPU){
+    if (alloc->type == ALLOC_MEM_GPU)
+    {
+      printf("Remote CUDA allocations not supported!\n");
     }
     #endif
     else {

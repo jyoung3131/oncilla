@@ -4,10 +4,18 @@
 #include <oncillamem.h>
 #include <math.h>
 
+#include <util/timer.h>
 //Needed to explicitly close EXTOLL connections
+#ifdef EXTOLL
 #include <io/extoll.h>
 #include "../src/extoll.h"
-#include <util/timer.h>
+#endif
+
+#ifdef CUDA
+#include <cuda.h>
+#include <cuda_runtime.h>
+#endif
+
 
 static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B){
   ocm_alloc_t a;
@@ -25,14 +33,14 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   alloc_params->local_alloc_bytes = local_size_B;
   switch (suboption){
     case 1:
-      alloc_params->kind = OCM_REMOTE_RDMA;
-      alloc_params->rem_alloc_bytes = rem_size_B;
+      alloc_params->kind = OCM_LOCAL_HOST;
       break;
     case 2:
       alloc_params->kind = OCM_LOCAL_GPU;
       break;
     case 3:
-      alloc_params->kind = OCM_LOCAL_HOST;
+      alloc_params->kind = OCM_REMOTE_RDMA;
+      alloc_params->rem_alloc_bytes = rem_size_B;
       break;
     case 4:
       alloc_params->kind = OCM_REMOTE_RMA;
@@ -56,6 +64,7 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     return -1;
   }
 
+  printf("Checking to see if ocm_localbuf works.\n");
   //Check to see if we can access a local buffer endpoint
   if (ocm_localbuf(a, &buf, &buf_len)) 
   {
@@ -80,7 +89,6 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   {
     if(ocm_extoll_disconnect(a))
       goto fail;
-
   }
 
   if (0 > ocm_tini()) {
@@ -102,8 +110,8 @@ usage:
     fprintf(stderr, "Usage:  <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
         " <allocation size 2 in MB (alloc2)>\n "
 	"\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
-	"\tSuboptions: 1=allocate IB buffer (alloc1-local, alloc2-remote); 2=allocate GPU memory\n"
-	" \t\t    3=allocate host memory 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n");
+	"\tSuboptions: 1=allocate host memory; 2=allocate GPU memory; 3=allocate IB buffer (alloc1-local, alloc2-remote)\n"
+	" \t\t 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n");
     return -1;
 }
 
@@ -310,8 +318,8 @@ usage:
     fprintf(stderr, "Usage: %s <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
         " <allocation size 2 in MB (alloc2)>\n "
 	"\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
-	"\tSuboptions: 1=allocate IB buffer (alloc1-local, alloc2-remote); 2=allocate GPU memory\n"
-	" \t\t    3=allocate host memory; 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n", argv[0]);
+	"\tSuboptions: 1=allocate host memory; 2=allocate GPU memory; 3=allocate IB buffer (alloc1-local, alloc2-remote)\n"
+	" \t\t4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n", argv[0]);
     return -1;
   }
 
