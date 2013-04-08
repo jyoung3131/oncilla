@@ -514,16 +514,16 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 		}
 #endif
-#ifdef CUDA
+//#ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
 			TIMER_START(gpu_timer);
 			cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
 			TIMER_END(gpu_timer, tmp_ns);
-                        TIMER_CLEAR(gpu_timer);
+			TIMER_CLEAR(gpu_timer);
 			transfer_timer->gpu_transfer_ns += tmp_ns;
 		}
-#endif
+//#endif
 		else
 		{
 			BUG(1);
@@ -539,23 +539,23 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rdma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
 		}
-#ifdef CUDA
+//#ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
 			TIMER_START(host_timer);
 			ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
 			TIMER_END(host_timer, tmp_ns);
-                        TIMER_CLEAR(host_timer);
-                        transfer_timer->host_transfer_ns += tmp_ns;
-			
+			TIMER_CLEAR(host_timer);
+			transfer_timer->host_transfer_ns += tmp_ns;
+
 			TIMER_START(gpu_timer);
 			cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rdma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
 			TIMER_END(gpu_timer, tmp_ns);
-                        TIMER_CLEAR(gpu_timer);
-                        transfer_timer->gpu_transfer_ns += tmp_ns;
+			TIMER_CLEAR(gpu_timer);
+			transfer_timer->gpu_transfer_ns += tmp_ns;
 
 		}
-#endif
+//#endif
 		else
 		{
 			BUG(1);
@@ -572,23 +572,23 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
 		}
-#ifdef CUDA
+//#ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
 			TIMER_START(host_timer);
 			extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
 			TIMER_END(host_timer, tmp_ns);
-                        TIMER_CLEAR(host_timer);
-                        transfer_timer->host_transfer_ns += tmp_ns;
+			TIMER_CLEAR(host_timer);
+			transfer_timer->host_transfer_ns += tmp_ns;
 
 
 			TIMER_START(gpu_timer);
 			cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
 			TIMER_END(gpu_timer, tmp_ns);
-                        TIMER_CLEAR(gpu_timer);
-                        transfer_timer->gpu_transfer_ns += tmp_ns;
+			TIMER_CLEAR(gpu_timer);
+			transfer_timer->gpu_transfer_ns += tmp_ns;
 		}
-#endif
+//#endif
 		else
 		{
 			BUG(1);
@@ -611,22 +611,23 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 
 		}
 #endif
+#ifdef EXTOLL
 		else if(dest->kind == OCM_REMOTE_RMA)
 		{
 			cudaMemcpy(dest->u.rma.local_ptr+cp_param->src_offset_2, src->u.gpu.cuda_ptr+cp_param->dest_offset_2, cp_param->bytes, cudaMemcpyDeviceToHost);
 			extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 			BUG(1);
 		}
+#endif
 	}
 #endif
 	else
 	{
 		BUG(1);
 	}
-
 	return 0;
-
 }
+
 
 
 	int
@@ -659,7 +660,6 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 			return -1;
 		}
 	}
-	return 0;
 #endif
 #ifdef EXTOLL
 	if(cp_param->bytes > src->u.rma.local_bytes)
@@ -682,9 +682,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 			return -1;
 		}
 	}
-	return 0;
 #endif
-
-	return -1;
+	return 0;
 }
 
