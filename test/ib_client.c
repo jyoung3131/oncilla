@@ -121,7 +121,7 @@ static int read_write_test()
     }
     printf("Setup done\n");
 
-  while(size_B<=pow(2,30)){
+  while(size_B<=pow(2,32)){
 	len=size_B;
 	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B);
@@ -129,6 +129,7 @@ static int read_write_test()
  
 	#ifdef TIMING
 	TIMER_START(ib_write_timer);
+	#endif
 	if(ib_write(ib, 0, 0, len)||ib_poll(ib))
 	{
 	    printf("write failed\n");
@@ -136,13 +137,14 @@ static int read_write_test()
 	}
 	TIMER_END(ib_write_timer, ib_write_time_ns);
 	TIMER_CLEAR(ib_write_timer);
+	#ifdef TIMING
 	printf("[W] time to write %llu bytes: %lu \n", size_B, ib_write_time_ns);     
 	#endif 
 	memset(buf, 0, len);
     	size_B*=2;
 	}
 	// read back and wait for completion
-      while(size_B2<=pow(2,30)){
+      while(size_B2<=pow(2,32)){
     	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B2);
 	#endif

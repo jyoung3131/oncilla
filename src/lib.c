@@ -21,7 +21,7 @@
 /* Directory includes */
 #include <cuda.h>
 #include <cuda_runtime.h> 
-
+#include <util/timer.h>
 /* Globals */
 
 /* Internal definitions */
@@ -199,7 +199,16 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     printd("ALLOC_MEM_HOST %lu bytes\n", msg.u.alloc.bytes);
     alloc->kind             = OCM_LOCAL_HOST;
     alloc->u.local.bytes    = msg.u.alloc.bytes;
+    #ifdef TIMING
+    uint64_t malloc_ns=0;
+    TIMER_DECLARE1(malloc_timer);
+    TIMER_START(malloc_timer);
+    #endif 
     alloc->u.local.ptr      = malloc(msg.u.alloc.bytes);
+    #ifdef TIMING
+    TIMER_END(malloc_timer, malloc_ns);
+    printf("Malloc time : %lu ns \n", malloc_ns);
+    #endif
     if (!alloc->u.local.ptr)
       goto out;
   }
@@ -208,9 +217,19 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
     alloc->kind             = OCM_LOCAL_GPU;
     alloc->u.gpu.bytes    = msg.u.alloc.bytes;
-    cudaMalloc(alloc->u.gpu.cuda_ptr, msg.u.alloc.bytes);
-    if (!alloc->u.gpu.cuda_ptr)
+    #ifdef TIMING
+    uint64_t cudaMalloc_ns=0;
+    TIMER_DECLARE1(cudaMalloc_timer);
+    TIMER_START(cudaMalloc_timer);
+    #endif 
+    if(cudaMalloc(alloc->u.gpu.cuda_ptr, msg.u.alloc.bytes)==cudaErrorMemoryAllocation)
+    {
       goto out;
+    }
+    #ifdef TIMING
+    TIMER_END(cudaMalloc_timer, cudaMalloc_ns);
+    printf("cudaMalloc time : %lu ns \n", cudaMalloc_ns);
+    #endif
   }
 
 #endif
@@ -221,7 +240,16 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     p.addr      = strdup(msg.u.alloc.u.rdma.ib_ip);
     p.port      = msg.u.alloc.u.rdma.port;
     p.buf_len   = alloc_param->local_alloc_bytes;
+    #ifdef TIMING
+    uint64_t mal_ns=0;
+    TIMER_DECLARE1(mal_timer);
+    TIMER_START(mal_timer);
+    #endif
     p.buf       = malloc(p.buf_len);
+    #ifdef TIMING
+    TIMER_END(mal_timer, mal_ns);
+    printf("IB Malloc time: %lu\n", mal_ns);
+    #endif
     if (!p.buf)
       goto out;
 
@@ -241,8 +269,17 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     alloc->u.rdma.local_bytes   = p.buf_len;
     alloc->u.rdma.local_ptr     = p.buf;
 
+    #ifdef TIMING
+    uint64_t ib_con_ns=0;
+    TIMER_DECLARE1(ib_con_timer);
+    TIMER_START(ib_con_timer);
+    #endif
     if (ib_connect(alloc->u.rdma.ib, false))
       goto out;
+    #ifdef TIMING
+    TIMER_END(ib_con_timer, ib_con_ns);
+    printf("ib connection time: %lu\n", ib_con_ns);
+    #endif
 
     printd("adding new alloc to list\n");
     lock_allocs();
@@ -295,7 +332,7 @@ ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len)
     *len = a->u.local.bytes;
   }
 #ifdef CUDA
-  if (a->kind == OCM_LOCAL_GPU) {
+  else if (a->kind == OCM_LOCAL_GPU) {
     buf = a->u.gpu.cuda_ptr;
     *len = a->u.gpu.bytes;
   }
