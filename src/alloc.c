@@ -166,9 +166,9 @@ alloc_ate(struct alloc_ation *alloc)
     #endif
 
     #ifdef EXTOLL
-    extoll_t ex;
+    else if (alloc->type == ALLOC_MEM_RMA) {
+      extoll_t ex;
 
-    if (alloc->type == ALLOC_MEM_RMA) {
         struct extoll_params p;
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
@@ -190,7 +190,7 @@ alloc_ate(struct alloc_ation *alloc)
     }
     #endif
     #ifdef CUDA
-    if (alloc->type == ALLOC_MEM_GPU)
+    else if (alloc->type == ALLOC_MEM_GPU)
     {
       printf("Remote CUDA allocations not supported!\n");
     }

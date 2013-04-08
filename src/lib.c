@@ -171,6 +171,7 @@ int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
 	return 0;
 }
 
+//Public access function to return the type of an allocation
 enum ocm_kind ocm_alloc_kind(ocm_alloc_t alloc)
 {
 	return alloc->kind;
@@ -476,7 +477,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 		else if(dest->kind == OCM_REMOTE_RMA)
 		{
 			//Do a memcpy to the local buffer and then write to the remote
-			//IB buffer
+			//EXTOLL buffer
 			memcpy(dest->u.rma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
 			extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 		}
@@ -544,14 +545,21 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 		//Do a cudaMemcpy from GPU memory to the local host memory
 		if(dest->kind == OCM_LOCAL_HOST)
 		{
-			cudaMemcpy(dest->u.local.ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
+			cudaMemcpy(dest->u.local.ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyDeviceToHost);
 		}
 #ifdef INFINIBAND
 		else if(dest->kind == OCM_REMOTE_RDMA)
 		{
-			cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
+			cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyDeviceToHost);
 			ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 
+		}
+#endif
+#ifdef EXTOLL
+		else if(dest->kind == OCM_REMOTE_RMA)
+		{
+			cudaMemcpy(dest->u.rma.local_ptr+cp_param->src_offset_2, src->u.gpu.cuda_ptr+cp_param->dest_offset_2, cp_param->bytes, cudaMemcpyDeviceToHost);
+			extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 		}
 #endif
 		else
@@ -623,9 +631,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 			return -1;
 		}
 	}
-	return 0;
 #endif
-
-	return -1;
+	return 0;
 }
 
