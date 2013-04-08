@@ -55,11 +55,7 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   uint64_t ocm_alloc_ns = 0;
   TIMER_DECLARE1(ocm_alloc_timer);
   TIMER_START(ocm_alloc_timer);
-<<<<<<< HEAD
-  #endif     
-=======
   #endif  
->>>>>>> d2b662e8ac88d2d2a61a9981c21ecd402167b5ee
   a = ocm_alloc(alloc_params);
   #ifdef TIMING
   TIMER_END(ocm_alloc_timer, ocm_alloc_ns);

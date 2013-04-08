@@ -374,8 +374,16 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 				" (remote rank%d) buf %lu bytes\n",
 				p.buf_len, 
 				msg.u.alloc.remote_rank, msg.u.alloc.bytes);
-
+   #ifdef TIMING
+   uint64_t ex_new_ns=0;
+   TIMER_DECLARE1(ex_new_timer);
+   TIMER_START(ex_new_timer);
+   #endif
 		alloc->u.rma.ex = extoll_new(&p);
+   #ifdef TIMING
+   TIMER_END(ex_new_timer,ex_new_ns);
+   printf("extoll_new time: %lu\n", ex_new_ns);
+   #endif
 		if (!alloc->u.rma.ex)
 			goto out;
 
@@ -385,8 +393,17 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 		alloc->u.rma.remote_bytes  = msg.u.alloc.bytes;
 		alloc->u.rma.local_bytes   = p.buf_len;
 
+    #ifdef TIMING
+    uint64_t extoll_con_ns=0;
+    TIMER_DECLARE1(extoll_con_timer);
+    TIMER_START(extoll_con_timer);
+    #endif
 		if (extoll_connect(alloc->u.rma.ex, false))
 			goto out;
+    #ifdef TIMING
+    TIMER_END(extoll_con_timer, extoll_con_ns);
+    printf("extoll connection time: %lu\n", extoll_con_ns);
+    #endif
 
 		//Once the connection is complete the buffer is allocated
 		alloc->u.rma.local_ptr = alloc->u.rma.ex->rma_conn.buf;
@@ -512,10 +529,11 @@ int ocm_copy_in(ocm_alloc_t dest, void *src)
 ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 {
 
+	#ifdef CUDA
 	TIMER_DECLARE1(host_timer);
 	TIMER_DECLARE1(gpu_timer);
 	uint64_t tmp_ns = 0;
-
+	#endif
 	//For read operations just reverse the order of the parameters
 	if (!cp_param->op_flag)
 	{
@@ -549,7 +567,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 		}
 #endif
-//#ifdef CUDA
+#ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
 			TIMER_START(gpu_timer);
@@ -558,7 +576,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			TIMER_CLEAR(gpu_timer);
 			transfer_timer->gpu_transfer_ns += tmp_ns;
 		}
-//#endif
+#endif
 		else
 		{
 			BUG(1);
@@ -574,7 +592,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rdma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
 		}
-//#ifdef CUDA
+#ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
 			TIMER_START(host_timer);
@@ -590,7 +608,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			transfer_timer->gpu_transfer_ns += tmp_ns;
 
 		}
-//#endif
+#endif
 		else
 		{
 			BUG(1);
@@ -607,7 +625,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
 		}
-//#ifdef CUDA
+#ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
 			TIMER_START(host_timer);
@@ -623,7 +641,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			TIMER_CLEAR(gpu_timer);
 			transfer_timer->gpu_transfer_ns += tmp_ns;
 		}
-//#endif
+#endif
 		else
 		{
 			BUG(1);
