@@ -1,3 +1,3 @@
 #rank dns ethernet_ip ocm_port rdmacm_port
-0 shiva.cc.gt.atl.ga.us 143.215.131.65 12345 67890
-1 ifrit.cc.gt.atl.ga.us 143.215.131.185 12345 67890
+1 shiva.cc.gt.atl.ga.us 143.215.131.65 12345 67890
+0 ifrit.cc.gt.atl.ga.us 143.215.131.185 12345 67890
