@@ -203,13 +203,10 @@ ib_client_connect(struct ib_alloc *ib)
     if (rdma_get_cm_event(ib->rdma.ch, &ib->rdma.evt))
         return -1;
 
-<<<<<<< HEAD
     #ifdef TIMING
     //resume total connection timer
     TIMER_START(ib_total_client_conn_timer);
     #endif
-=======
->>>>>>> d2b662e8ac88d2d2a61a9981c21ecd402167b5ee
 
     printd("Checking with server to make sure connection establisted\n");
     if (ib->rdma.evt->event != RDMA_CM_EVENT_ESTABLISHED)
