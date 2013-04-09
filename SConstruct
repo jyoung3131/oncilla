@@ -65,7 +65,7 @@ if run('which clang', env):
 print 'Testing to see if CUDA is installed'
 if not run('nvcc --version', env):
   print 'CUDA found\n'
-#  cuda_flag = 1
+  cuda_flag = 1
 env = conf.Finish()
 
 # C configuration environment
