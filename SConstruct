@@ -47,7 +47,8 @@ if not env.GetOption('clean'):
     print 'IB not found\n'
     envcompilepath = 'extoll'
 
-  if not conf.CheckCHeader('/extoll2/include/rma2.h'):
+  #Search for the EXTOLL installation
+  if run('find /extoll2/include -name extolldrv.h', env):
     print 'EXTOLL install not found\n'
     envcompilepath = 'ib'
 
@@ -110,6 +111,7 @@ if int(ARGUMENTS.get('ib', 0)):
    ccflags.extend(['-DINFINIBAND'])
 elif int(ARGUMENTS.get('extoll', 0)):
    compilepath = 'extoll'
+   cpath.extend(['/extoll2/include'])
    ccflags.extend(['-DEXTOLL'])
 else:
    if envcompilepath == 'ib':
@@ -117,6 +119,7 @@ else:
       ccflags.extend(['-DINFINIBAND'])
    elif envcompilepath == 'extoll':
       compilepath = 'extoll'
+      cpath.extend(['/extoll2/include'])
       ccflags.extend(['-DEXTOLL'])
    else:
       compilepath = 'all'
