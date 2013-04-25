@@ -192,14 +192,17 @@ ib_client_connect(struct ib_alloc *ib)
     printd("Connecting to server with rdma_connect\n");
     
     //resume total connection timer
+    #ifdef TIMING
     TIMER_START(ib_total_client_conn_timer);
+    #endif
     if (rdma_connect(ib->rdma.id, &ib->rdma.param))
         return -1;
 
     //stop timer to ignore wait blocks
+    #ifdef TIMING
     TIMER_END(ib_total_client_conn_timer, ib_total_conn_ns);
     ib_total_conn_ns_sum+= ib_total_conn_ns;
-
+    #endif
     if (rdma_get_cm_event(ib->rdma.ch, &ib->rdma.evt))
         return -1;
 
