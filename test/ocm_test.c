@@ -3,7 +3,6 @@
 #include <string.h>
 #include <oncillamem.h>
 #include <math.h>
-#include <util/timer.h>
 
 //Needed to explicitly close EXTOLL connections
 #ifdef EXTOLL
@@ -312,62 +311,173 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   return 0;
 }
 
+static int read_write_bw_test(int num_iter){
+  ocm_alloc_t a;
+  void *buf;
+  size_t buf_len, remote_len;
+  ocm_alloc_param_t alloc_params;
+  ocm_param_t copy_params;
+  uint64_t local_size_B = 64;
+  uint64_t alloc_size_B = pow(2,32);
+  int i;
+  int counter=0;
+  if (0 > ocm_init()) {
+    printf("Cannot connect to OCM\n");
+    return -1;
+  }
+
+//  Create a structure that is used to configure the allocation on each endpoint
+  alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
+  alloc_params->local_alloc_bytes = alloc_size_B;
+  alloc_params->rem_alloc_bytes = alloc_size_B;
+  alloc_params->kind = OCM_REMOTE_RDMA;
+
+  a = ocm_alloc(alloc_params);
+  if (!a) {
+    printf("ocm_alloc failed on remote size %lu\n", alloc_size_B);
+    return -1;
+  }
+
+  copy_params = (ocm_param_t)calloc(1,sizeof(struct ocm_params));
+  copy_params->src_offset = 0;
+  copy_params->dest_offset = 0;
+  copy_params->op_flag = 0;
+
+  while(local_size_B<=1){//pow(2,32)){
+//    Use a one-sided copy since we are copying from a local-remote IB
+//    paired object
+    printf("reading for size %lu\n", local_size_B);
+    copy_params->bytes= local_size_B;
+    for (i=0; i<num_iter; i++){
+      counter++;
+      printf("reading\n");
+      if(ocm_copy_onesided(a, copy_params)){
+        printf("ocm_copy_onesided (read) failed at size %lu\n",local_size_B);
+        goto fail;
+      }
+    }
+    local_size_B*=2;
+  }
+  local_size_B=64;
+  copy_params->op_flag = 1;
+int c=0;
+  while(local_size_B<=pow(2,32)){
+    copy_params->bytes= local_size_B;
+    printf("writing for size %lu\n", local_size_B);
+    for (i=0; i<num_iter; i++){
+      counter++;
+      printf("writing\n");
+      if(ocm_copy_onesided(a, copy_params)){
+        printf("ocm_copy_onesided (write) failed at size %lu count: %d\n", local_size_B,c);
+        goto fail;
+      }
+    }
+    local_size_B*=2;
+        c++;
+  }
+  if (ocm_localbuf(a, &buf, &buf_len)) {
+    printf("ocm_localbuf failed\n");
+    goto fail;
+  }
+  printf("local buffer size %lu @ %p\n", buf_len, buf);
+
+  if (ocm_is_remote(a)) {
+    if (!ocm_remote_sz(a, &remote_len)) {
+      printf("alloc is remote; size = %lu\n", remote_len);
+    } else {
+      printf("alloc is local\n");
+    }
+  }
+
+  free(alloc_params);
+  free(copy_params);
+
+  if (0 > ocm_tini()) {
+    printf("ocm_tini failed\n");
+    return -1;
+  }
+
+  printf("OCM test completed successfully\n");
+  return 0;
+
+fail:
+
+  free(alloc_params);
+  free(copy_params);
+  if (0 > ocm_tini())
+    printf("ocm_tini failed\n");
+  return -1;
+}
+
+
 int main(int argc, char *argv[])
 {
-  if (argc != 5) {
+if (argc < 5) {
 usage:
     fprintf(stderr, "Usage: %s <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
-        " <allocation size 2 in MB (alloc2)>\n "
-	"\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
-	"\tSuboptions: 1=allocate host memory; 2=allocate GPU memory; 3=allocate IB buffer (alloc1-local, alloc2-remote)\n"
-	" \t\t4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n", argv[0]);
+            " <allocation size 2 in MB (alloc2)>\n "
+            "\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided; 4=read/write BW\n"
+            "\tSuboptions: 1=allocate IB buffer (alloc1-local, alloc2-remote); 2=allocate GPU memory\n"
+            " \t\t    3=allocate host memory\n", argv[0]);
     return -1;
-  }
+}
+//Convert the double values for MB input to bytes
+double local_size_MB = strtod(argv[3], 0);
+uint64_t local_size_B = (uint64_t)(local_size_MB*pow(2,20));
 
-  //Convert the double values for MB input to bytes
-  double local_size_MB = strtod(argv[3], 0);
-  uint64_t local_size_B = (uint64_t)(local_size_MB*pow(2,20));
-
-  //Convert the double values for MB input to bytes
-  double rem_size_MB = strtod(argv[4], 0);
-  uint64_t rem_size_B = (uint64_t)(rem_size_MB*pow(2,20));
-
-  if(local_size_B > rem_size_B)
-  {
+//Convert the double values for MB input to bytes
+double rem_size_MB = strtod(argv[4], 0);
+uint64_t rem_size_B = (uint64_t)(rem_size_MB*pow(2,20));
+int num_iter=1;
+if(local_size_B > rem_size_B)
+{
     printf("Please use a larger remote buffer size than local size\n");
     return -1;
-  }
-  switch (atoi(argv[1])){
-    //allocation
-    case 1:
-      printf("Testing OCM allocation with local buffer of size %4f MB and remote buffer of size %4f MB\n", local_size_MB, rem_size_MB);
-      if(alloc_test(atoi(argv[2]),local_size_B, rem_size_B)){
-        fprintf(stderr, "FAIL: allocation test\n");
-	return -1;
-      }
-      else
-	printf("pass: allocation test\n");
-      break;     
-    //copy-onesided
-    case 2:
-      if(copy_onesided_test(local_size_B,rem_size_B)){
-	fprintf(stderr, "FAIL: allocation test\n");
-	return -1;
-      }
-      else
-	printf("pass: copy one-sided test\n");
-      break;
-    //copy-twosided
-    case 3:
-      if(copy_twosided_test(local_size_B, rem_size_B)){
-	fprintf(stderr, "FAIL: copy twosided test\n");
-	return -1;
-      }
-      else
-	printf("pass: copy two-sided test\n");
-      break;
+}
+switch (atoi(argv[1])){
+        //allocation
+        case 1:
+        printf("Testing IB allocation with local buffer of size %4f MB and remote buffer of size %4f MB\n", local_size_MB, rem_size_MB);
+        if(alloc_test(atoi(argv[2]),local_size_B, rem_size_B)){
+            fprintf(stderr, "FAIL: allocation test\n");
+            return -1;
+        }
+        else
+            printf("pass: allocation test\n");
+            break;
+        //copy-onesided
+	case 2:
+        if(copy_onesided_test(local_size_B,rem_size_B)){
+            fprintf(stderr, "FAIL: allocation test\n");
+            return -1;
+        }
+        else
+            printf("pass: copy one-sided test\n");
+            break;
+        //copy-twosided
+        case 3:
+        if(copy_twosided_test(local_size_B, rem_size_B)){
+            fprintf(stderr, "FAIL: copy twosided test\n");
+            return -1;
+        }
+        else
+            printf("pass: copy two-sided test\n");
+            break;
+    case 4:
+        if (argc !=6){
+            printf("Number of iteration not specified. Default is 1 iteration\n");
+        }
+        else
+            num_iter=atoi(argv[5]);
+            if(read_write_bw_test(num_iter)){
+                fprintf(stderr, "FAIL: read/write bw test\n");
+                return -1;
+            }
+            else
+                printf("pass: read/write bw test\n");
+                break;
     default:
-      goto usage;
-  }
-  return 0;	
+        goto usage;
+}
+return 0;
 }
