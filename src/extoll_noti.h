@@ -1,6 +1,7 @@
 /* file: extoll_noti.h
   * author: Jeff Young <jyoung9@gatech.edu>
-  * desc: internal data structures for the EXTOLL interface
+  * desc: Internal data structures used to get around teardown issues
+  * with pinned pages and RMA2. 
   *
 */
 
@@ -10,6 +11,6 @@
 //the notification loop - making this static might cause
 //a segfault - not yet sure why
 jmp_buf jmp_noti_buf;
-static volatile int noti_loop;
+volatile int noti_loop;
 
 #endif

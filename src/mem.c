@@ -182,6 +182,9 @@ __msg_req_alloc(struct message *msg)
     msg->status++;
 }
 
+///Sends a request message to rank 0 to find a node for an allocation,
+///then sends a subsquent message to rank N to request an allocation
+
 static int
 msg_send_req_alloc(struct message *msg)
 {
@@ -198,7 +201,7 @@ msg_send_req_alloc(struct message *msg)
         goto out;
 
     printd("got alloc type %d\n", msg->u.alloc.type);
-    if (msg->u.alloc.type != ALLOC_MEM_HOST) {
+    if ((msg->u.alloc.type != ALLOC_MEM_HOST) && (msg->u.alloc.type != ALLOC_MEM_GPU)) {
         msg->type   = MSG_DO_ALLOC;
         msg->status = MSG_REQUEST;
         /* TODO support multiple allocs across nodes here */
@@ -238,12 +241,16 @@ inbound_thread(void *arg)
         if (msg.type == MSG_ADD_NODE) {
             alloc_add_node(msg.rank, &msg.u.node.config);
         } else if (msg.type == MSG_REQ_ALLOC) {
+            //Currently only rank 0 can handle inital allocation request
+            //messages to determine the rank of the node that will fulfill
+            //the allocation
             BUG(myrank != 0);
             msg_recv_req_alloc(&msg);
             ret = conn_put(conn, &msg, sizeof(msg));
             if (--ret < 0)
                 break;
         } else if (msg.type == MSG_DO_ALLOC) {
+            #ifdef INFINIBAND
             /* First, send msg back to orig rank to unblock app, so it can
              * initiate connection to us. Then listen for connections.
              * XXX possible race condition
@@ -252,6 +259,18 @@ inbound_thread(void *arg)
             if (--ret < 0)
                 break;
             msg_recv_do_alloc(&msg); /* blocks */
+            #endif
+            #ifdef EXTOLL
+            /* EXTOLL server allocations are nonblocking and the call to
+             * alloc_ate should return the needed setup parameters for the client
+             * in msg.
+             */
+            msg_recv_do_alloc(&msg); /* should not block for EXTOLL setup */
+            ret = conn_put(conn, &msg, sizeof(msg));
+            //TODO - this code helps to close the server properly, but it should be
+            //replaced once the free path is written 
+            extoll_notification(msg.u.alloc.u.rma.ex_temp);
+            #endif
         } else {
             printd("unhandled message %s\n", MSG_TYPE2STR(msg.type));
             BUG(1);
@@ -262,6 +281,10 @@ inbound_thread(void *arg)
     return NULL;
 }
 
+
+///listen_thread is spawned on each node from the mem_init call and it
+///creates a connection to a socket on the OCM port. It also spawns
+///inbound_thread to listen for new messages on this port
 static void *
 listen_thread(void *arg) /* persistent */
 {

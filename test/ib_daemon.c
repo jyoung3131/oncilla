@@ -68,7 +68,7 @@ static int alloc_test(long long unsigned int size_B)
 }
 
 /* read / write to/from memory */
-static int read_write_test(void){
+static int read_write_bw_test(void){
 
 	ib_t ib;
 	struct ib_params params;
@@ -102,6 +102,7 @@ static int read_write_test(void){
 	
 	return 0;
 }
+
 static int one_sided_test(void)
 {
 	ib_t ib;
@@ -200,7 +201,7 @@ int main(int argc, char *argv[])
 	if (argc != 3) {
 usage:
 		fprintf(stderr, "Usage: %s <test_num> <alloc_size_MB>\n"
-       "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write daemon\n"
+       "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write bandwidth daemon\n"
        "\talloc_size: can be specified in any positive decimal format\n", argv[0]);
 
 		return -1;
@@ -239,12 +240,12 @@ usage:
 				printf("pass: alloc_test\n");
 			break;
 		case 3:
-			printf("Running daemon for read/write test\n");
-			if(read_write_test()){
-			    fprintf(stderr, "FAIL: read/write test\n");
+			printf("Running daemon for read/write bandwidth test\n");
+			if(read_write_bw_test()){
+			    fprintf(stderr, "FAIL: read/write bandwidth test\n");
 			    return -1;
 			} else
-			    printf("PASS: read/write test\n");		
+			    printf("PASS: read/write bandwidth test\n");		
 			break;
     default:
       goto usage;

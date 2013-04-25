@@ -38,14 +38,16 @@ struct __rma_t {
   //memory referred to by this operation can be safely used
   //For best bandwidth, two put/get operations can be overlapped, requiring
   //two notifications
-  RMA2_Notification* notification[2];
+  RMA2_Notification* notification;
   //Handles hold information on connections
   RMA2_Handle handle;
   //The connection type specifies whether the RMA connection is directly
   //accessing memory, registers, or using API-related structures
   RMA2_Connection_Options conn_type;
-  //Offset used for data transfers
-  uint32_t dest_offset;
+  //Local offset used for data transfers
+  uint64_t src_offset;
+  //Remote offset used for data transfers
+  uint64_t dest_offset;
   //A void pointer to pages that are pinned and can be associated
   //with an RMA2_Region
   void* buf;
@@ -54,7 +56,7 @@ struct __rma_t {
 struct extoll_alloc
 {
     struct list_head    link;
-    struct __rma_t rma;
+    struct __rma_t rma_conn;
     struct extoll_params params;
 };
 

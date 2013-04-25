@@ -1,15 +1,10 @@
-/* file: rdma_server.c
- * author: Alexander Merritt, merritt.alex@gatech.edu
- * desc: File taken from Adit Ranadive's commlib RDMA code and refactored for
- * OCM
+/* file: extoll_server.c
+ * author: Jeffrey Young, jyoung9@gatech.edu 
+ * desc: EXTOLL RMA2 server connect and teardown functions.
+ * 
  */
 
 /* System includes */
-#include <arpa/inet.h>
-#include <infiniband/arch.h>
-#include <infiniband/verbs.h>
-#include <netdb.h>
-#include <rdma/rdma_cma.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -49,7 +44,7 @@ int extoll_server_connect(struct extoll_alloc *ex)
   printf("extoll_server_connect:: local_buff_size_B is %lu B\n",ex->params.buf_len);
   //Note that posix_memalign does a malloc, so the buffer should not be allocated yet!
 
-      rc=rma2_open(&(ex->rma.port));
+      rc=rma2_open(&(ex->rma_conn.port));
 
   if (rc!=RMA2_SUCCESS)
   {
@@ -57,7 +52,7 @@ int extoll_server_connect(struct extoll_alloc *ex)
     return -1;
   }
 
-    mem_result=posix_memalign((void**)&(ex->rma.buf),4096,ex->params.buf_len);
+    mem_result=posix_memalign((void**)&(ex->rma_conn.buf),4096,ex->params.buf_len);
 
   if (mem_result!=0)
   {
@@ -66,7 +61,7 @@ int extoll_server_connect(struct extoll_alloc *ex)
   }
 
   //Registration pins the pages in a manner similar to ibv_reg_mr for IB 
-    rc=rma2_register(ex->rma.port, ex->rma.buf, ex->params.buf_len, &(ex->rma.region));
+    rc=rma2_register(ex->rma_conn.port, ex->rma_conn.buf, ex->params.buf_len, &(ex->rma_conn.region));
 
   if (rc!=RMA2_SUCCESS)
   {
@@ -74,9 +69,9 @@ int extoll_server_connect(struct extoll_alloc *ex)
     return -1;
   }
 
-  ex->params.dest_node = rma2_get_nodeid(ex->rma.port);
-  ex->params.dest_vpid = rma2_get_vpid(ex->rma.port);
-  rma2_get_nla(ex->rma.region, 0, &(ex->params.dest_nla));
+  ex->params.dest_node = rma2_get_nodeid(ex->rma_conn.port);
+  ex->params.dest_vpid = rma2_get_vpid(ex->rma_conn.port);
+  rma2_get_nla(ex->rma_conn.region, 0, &(ex->params.dest_nla));
 
 
   printf("Registered region: node %u vpid %u NLA 0x%lx\n", ex->params.dest_node,  ex->params.dest_vpid,(uint64_t)(ex->params.dest_nla));
@@ -97,16 +92,18 @@ void extoll_server_notification(struct extoll_alloc *ex)
   printf("Server is waiting for notifications - enter Ctrl-\\ to exit\n");
   while (noti_loop)
   {
-    rc=rma2_noti_get_block(ex->rma.port, &(ex->rma.notification[0]));
+    rc=rma2_noti_get_block(ex->rma_conn.port, &(ex->rma_conn.notification));
     //nonblocking version
     //rc=rma2_noti_probe(rma2Obj->port, &(rma2Obj->notification));
     if (rc != RMA2_SUCCESS)
     {
       continue;
     }
-    rma2_noti_dump(ex->rma.notification[0]);
-    rma2_noti_free(ex->rma.port,ex->rma.notification[0]);
-    printf("\n\nContent !=0:\n\n");
+#ifdef __DEBUG_ENABLED
+    rma2_noti_dump(ex->rma_conn.notification);
+#endif
+    rma2_noti_free(ex->rma_conn.port,ex->rma_conn.notification);
+    printd("\n\nContent !=0:\n\n");
   }
 
 }
@@ -120,8 +117,9 @@ int extoll_server_disconnect(struct extoll_alloc *ex)
   //never performed rma2_connect
 
   //Unregister the pages when the program is stopped
-  printf("Unregister pages\n");
-    rc=rma2_unregister(ex->rma.port, ex->rma.region);
+  //This should also free the memory
+  printd("Unregister pages\n");
+  rc=rma2_unregister(ex->rma_conn.port, ex->rma_conn.region);
 
   if (rc!=RMA2_SUCCESS) 
   {
@@ -130,17 +128,15 @@ int extoll_server_disconnect(struct extoll_alloc *ex)
   }
 
 
-  printf("Close the RMA port\n");
-  ///rma_disconnect(port,handle);
-    rc=rma2_close(ex->rma.port);
+  printd("Close the RMA port\n");
+  ///rma_conn_disconnect(port,handle);
+  rc=rma2_close(ex->rma_conn.port);
 
   if (rc!=RMA2_SUCCESS) 
   {
     print_err(rc);
     return -1;
   }
-
-  free(ex->rma.buf);
 
   return 0;
 }

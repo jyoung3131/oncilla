@@ -55,13 +55,13 @@ int extoll_connect(extoll_t ex, bool is_server);
 //operations (client handles get notifications)
 void extoll_notification(extoll_t ex);
 int extoll_disconnect(extoll_t ex, bool is_server);
+int extoll_read(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len);
+int extoll_write(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len);
 
 static void print_err(RMA2_ERROR err)
 {
     fprintf(stderr, "RMA error occured: %x\n", (unsigned int )err);
 }
-//int extoll_read(extoll_t extoll, size_t offset, size_t len);
-//int extoll_write(extoll_t extoll, size_t offset, size_t len);
 
 
 /* TODO include func to change remote mapping of local buf */
