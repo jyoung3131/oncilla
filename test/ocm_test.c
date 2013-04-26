@@ -3,7 +3,6 @@
 #include <string.h>
 #include <oncillamem.h>
 #include <math.h>
-#include <util/timer.h>
 
 #include <util/timer.h>
 //Needed to explicitly close EXTOLL connections
@@ -23,7 +22,7 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   void *buf;
   size_t buf_len, remote_len;
   ocm_alloc_param_t alloc_params;
-  
+
 
   if (0 > ocm_init()) {
     printf("Cannot connect to OCM\n");
@@ -51,16 +50,16 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     default:
       goto usage;
   }
-  #ifdef TIMING
+#ifdef TIMING
   uint64_t ocm_alloc_ns = 0;
   TIMER_DECLARE1(ocm_alloc_timer);
   TIMER_START(ocm_alloc_timer);
-  #endif     
+#endif     
   a = ocm_alloc(alloc_params);
-  #ifdef TIMING
+#ifdef TIMING
   TIMER_END(ocm_alloc_timer, ocm_alloc_ns);
   printf("Allocation time for %lu bytes: %lu ns\n", local_size_B, ocm_alloc_ns);
-  #endif
+#endif
   if (!a) {
     printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
     return -1;
@@ -109,12 +108,12 @@ fail:
   return -1;
 
 usage:
-    fprintf(stderr, "Usage:  <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
-        " <allocation size 2 in MB (alloc2)>\n "
-	"\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
-	"\tSuboptions: 1=allocate host memory; 2=allocate GPU memory; 3=allocate IB buffer (alloc1-local, alloc2-remote)\n"
-	" \t\t 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n");
-    return -1;
+  fprintf(stderr, "Usage:  <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
+      " <allocation size 2 in MB (alloc2)>\n "
+      "\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
+      "\tSuboptions for test 1: 1=allocate host memory; 2=allocate GPU memory; 3=allocate IB buffer (alloc1-local, alloc2-remote)\n"
+      " \t\t 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n");
+  return -1;
 }
 
 static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
@@ -133,12 +132,12 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
   alloc_params->local_alloc_bytes = local_size_B;
   alloc_params->rem_alloc_bytes = rem_size_B;
-  #ifdef INFINIBAND
+#ifdef INFINIBAND
   alloc_params->kind = OCM_REMOTE_RDMA;
-  #endif
-  #ifdef EXTOLL
+#endif
+#ifdef EXTOLL
   alloc_params->kind = OCM_REMOTE_RMA;
-  #endif
+#endif
 
   a = ocm_alloc(alloc_params);
   if (!a) {
@@ -200,95 +199,13 @@ fail:
   return -1;
 }
 
-static int read_write_bw_test(){
-  ocm_alloc_t a;
-  void *buf;
-  size_t buf_len, remote_len;
-  ocm_alloc_param_t alloc_params;
-  ocm_param_t copy_params;
-
-  if (0 > ocm_init()) {
-    printf("Cannot connect to OCM\n");
-    return -1;
-  }
-
-  //Create a structure that is used to configure the allocation on each endpoint
-  alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
-  alloc_params->local_alloc_bytes = local_size_B;
-  alloc_params->rem_alloc_bytes = rem_size_B;
-  #ifdef INFINIBAND
-  alloc_params->kind = OCM_REMOTE_RDMA;
-  #endif
-  #ifdef EXTOLL
-  alloc_params->kind = OCM_REMOTE_RMA;
-  #endif
-
-  a = ocm_alloc(alloc_params);
-  if (!a) {
-    printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
-    return -1;
-  }
-
-  copy_params = (ocm_param_t)calloc(1,sizeof(struct ocm_params));
-  copy_params->src_offset = 0;
-  copy_params->dest_offset = 0;
-  copy_params->bytes = local_size_B;
-  copy_params->op_flag = 0;
-
-  //Use a one-sided copy since we are copying from a local-remote IB
-  //paired object
-  if(ocm_copy_onesided(a, copy_params)){
-    printf("ocm_copy_onesided (read) failed\n");
-    goto fail;
-  } 
-
-  copy_params->op_flag = 1;
-
-  if(ocm_copy_onesided(a, copy_params)){
-    printf("ocm_copy_onesided (write) failed\n");
-    goto fail;
-  } 
-
-  if (ocm_localbuf(a, &buf, &buf_len)) {
-    printf("ocm_localbuf failed\n");
-    goto fail;
-  }
-  printf("local buffer size %lu @ %p\n", buf_len, buf);
-
-  if (ocm_is_remote(a)) {
-    if (!ocm_remote_sz(a, &remote_len)) {
-      printf("alloc is remote; size = %lu\n", remote_len);
-    } else {
-      printf("alloc is local\n");
-    }
-  }
-
-  free(alloc_params);
-  free(copy_params);
-
-  if (0 > ocm_tini()) {
-    printf("ocm_tini failed\n");
-    return -1;
-  }
-
-  printf("OCM test completed successfully\n");
-  return 0;
-
-fail:
-
-  free(alloc_params);
-  free(copy_params);
-  if (0 > ocm_tini())
-    printf("ocm_tini failed\n");
-  return -1;
-}
 static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   ocm_alloc_t local_alloc, remote_alloc, local_alloc2;
-  #ifdef CUDA
+#ifdef CUDA
   ocm_alloc_t gpu_alloc;
-  #endif
-//  void *buf;
-//  size_t buf_len, remote_len;
+#endif
+  //  void *buf;
+  //  size_t buf_len, remote_len;
   ocm_alloc_param_t alloc_params;
   ocm_param_t copy_params;
 
@@ -301,7 +218,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
   alloc_params->local_alloc_bytes = local_size_B;
   alloc_params->kind = OCM_LOCAL_HOST;
- 
+
   local_alloc = ocm_alloc(alloc_params);
   if (!local_alloc) {
     printf("local ocm_alloc failed on alloc size %lu\n", local_size_B);
@@ -310,7 +227,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   printf("local alloc success\n");
   // local allocation 2
   alloc_params->kind = OCM_LOCAL_HOST;
- 
+
   local_alloc2 = ocm_alloc(alloc_params);
   if (!local_alloc2) {
     printf("local ocm_alloc failed on alloc size %lu\n", local_size_B);
@@ -319,22 +236,22 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   printf("second local alloc success\n");
   //GPU allocation
   alloc_params->kind = OCM_LOCAL_GPU;
-/* 
-  gpu_alloc = ocm_alloc(alloc_params);
-  if (!gpu_alloc) {
-    printf("gpu ocm_alloc failed on gpu alloc size %lu\n", local_size_B);
-    return -1;
-  }
-  printf("gpu alloc success\n");
-*/ 
- // Remote alloc
+  /* 
+     gpu_alloc = ocm_alloc(alloc_params);
+     if (!gpu_alloc) {
+     printf("gpu ocm_alloc failed on gpu alloc size %lu\n", local_size_B);
+     return -1;
+     }
+     printf("gpu alloc success\n");
+     */ 
+  // Remote alloc
   alloc_params->rem_alloc_bytes = rem_size_B;
-  #ifdef INFINIBAND
+#ifdef INFINIBAND
   alloc_params->kind = OCM_REMOTE_RDMA;
-  #endif
-  #ifdef EXTOLL
+#endif
+#ifdef EXTOLL
   alloc_params->kind = OCM_REMOTE_RMA;
-  #endif
+#endif
   remote_alloc = ocm_alloc(alloc_params);
   if (!remote_alloc) {
     printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
@@ -348,109 +265,229 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   copy_params->dest_offset = 0;
   copy_params->bytes = local_size_B;
   copy_params->op_flag = 1;
- 
-  #ifdef CUDA 
+
+#ifdef CUDA 
   // GPU->host
   if(ocm_copy(local_alloc, gpu_alloc, copy_params)){
     printf("ocm_copy from GPU to host memory failed\n");
     return -1;    
   }
-  
+
   // GPU->remote 
   if(ocm_copy(remote_alloc, gpu_alloc, copy_params)){
     printf("ocm_copy from GPU to remote memory failed\n");
     return -1;
   }
-  #endif
+#endif
   // Host->host
   if(ocm_copy(local_alloc2, local_alloc, copy_params)){
     printf("ocm_copy from host to host failed\n");
     return -1;
   }
-  
+
   // Host->remote 
   if(ocm_copy(remote_alloc, local_alloc, copy_params)){
     printf("ocm_copy from host to remote failed\n");
     return -1;
   }
-  #ifdef CUDA
+#ifdef CUDA
   // Host->GPU
   if(ocm_copy(gpu_alloc, local_alloc, copy_params)){
     printf("ocm_copy from host to GPU failed\n");
     return -1;
   }
-  #endif
+#endif
   // remote->host
   if(ocm_copy(local_alloc,remote_alloc, copy_params)){
     printf("ocm_copy from remote to local failed\n");
     return -1;
   }
-  #ifdef CUDA
+#ifdef CUDA
   // remote->GPU
   if(ocm_copy(gpu_alloc, remote_alloc, copy_params)){
     printf("ocm_copy from remote RMDA to GPU failed\n");
     return -1;
   }
-  #endif
+#endif
   return 0;
 }
 
-int main(int argc, char *argv[])
-{
-  if (argc != 5) {
-usage:
-    fprintf(stderr, "Usage: %s <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
-        " <allocation size 2 in MB (alloc2)>\n "
-	"\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided; 4= read/write BW test\n" 
-	"\tSuboptions: 1=allocate host memory; 2=allocate GPU memory; 3=allocate IB buffer (alloc1-local, alloc2-remote)\n"
-	" \t\t4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n", argv[0]);
+static int read_write_bw_test(int num_iter){
+  ocm_alloc_t a;
+
+  ocm_alloc_param_t alloc_params;
+  ocm_param_t copy_params;
+  uint64_t local_size_B = 64;
+  uint64_t alloc_size_B = pow(2,31)+1;
+  uint64_t max_rw_size_B = pow(2,30);
+  int i;
+  int counter=0;
+  if (0 > ocm_init()) {
+    printf("Cannot connect to OCM\n");
     return -1;
   }
 
+  //Create a structure that is used to configure the allocation on each endpoint
+  alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
+  alloc_params->local_alloc_bytes = alloc_size_B;
+  alloc_params->rem_alloc_bytes = alloc_size_B;
+  alloc_params->kind = OCM_REMOTE_RDMA;
+
+  a = ocm_alloc(alloc_params);
+  if (!a) {
+    printf("ocm_alloc failed on remote size %lu\n", alloc_size_B);
+    return -1;
+  }
+
+  copy_params = (ocm_param_t)calloc(1,sizeof(struct ocm_params));
+  copy_params->src_offset = 0;
+  copy_params->dest_offset = 0;
+  //set the operation to a read, initially
+  copy_params->op_flag = 0;
+
+  //---------------------------
+  //Do the read bandwidth test
+  //---------------------------
+  while(local_size_B <= (max_rw_size_B)){
+    //Use a one-sided copy since we are copying from a local-remote IB
+    //paired object
+    printf("Reading for size %lu\n", local_size_B);
+    copy_params->bytes= local_size_B;
+
+    for (i=0; i<num_iter; i++){
+      counter++;
+      //printf("reading\n");
+      if(ocm_copy_onesided(a, copy_params)){
+        printf("ocm_copy_onesided (read) failed at size %lu\n",local_size_B);
+        goto fail;
+      }
+    }
+    local_size_B*=2;
+  }
+
+  //---------------------------
+  //Do the write bandwidth test
+  //---------------------------
+  local_size_B=64;
+  copy_params->op_flag = 1;
+  int c=0;
+
+  while(local_size_B <= (max_rw_size_B))
+  {
+    copy_params->bytes= local_size_B;
+    printf("Writing for size %lu\n", local_size_B);
+
+    for (i=0; i<num_iter; i++){
+      counter++;
+      //printf("writing\n");
+      if(ocm_copy_onesided(a, copy_params))
+      {
+        printf("ocm_copy_onesided (write) failed at size %lu count: %d\n", local_size_B, c);
+        goto fail;
+      }
+    }
+    local_size_B*=2;
+    c++;
+  }
+
+  //Free allocation and configuration parameters
+  free(alloc_params);
+  free(copy_params);
+
+  if (0 > ocm_tini()) {
+    printf("ocm_tini failed\n");
+    return -1;
+  }
+
+  printf("OCM test completed successfully\n");
+  return 0;
+
+fail:
+
+  free(alloc_params);
+  free(copy_params);
+  if (0 > ocm_tini())
+    printf("ocm_tini failed\n");
+  return -1;
+}
+
+
+int main(int argc, char *argv[])
+{
+  double local_size_MB;
+  uint64_t local_size_B;
+  double rem_size_MB;
+  uint64_t rem_size_B;
+
+  //number of iterations for bandwidth test
+  int num_iter=1;
+
+  if (argc < 5) {
+usage:
+    fprintf(stderr, "Usage: %s <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
+        " <allocation size 2 in MB (alloc2)>\n "
+        "\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided; 4=read/write BW\n"
+        "\tSuboptions for test 1: 1=allocate IB buffer (alloc1-local, alloc2-remote); 2=allocate GPU memory\n"
+        " \t\t    3=allocate host memory\n \tSuboptions for test 4: number of iterations\n", argv[0]);
+    return -1;
+  }
   //Convert the double values for MB input to bytes
-  double local_size_MB = strtod(argv[3], 0);
-  uint64_t local_size_B = (uint64_t)(local_size_MB*pow(2,20));
+  local_size_MB = strtod(argv[3], 0);
+  local_size_B = (uint64_t)(local_size_MB*pow(2,20));
 
   //Convert the double values for MB input to bytes
-  double rem_size_MB = strtod(argv[4], 0);
-  uint64_t rem_size_B = (uint64_t)(rem_size_MB*pow(2,20));
+  rem_size_MB = strtod(argv[4], 0);
+  rem_size_B = (uint64_t)(rem_size_MB*pow(2,20));
 
   if(local_size_B > rem_size_B)
   {
     printf("Please use a larger remote buffer size than local size\n");
     return -1;
   }
+
   switch (atoi(argv[1])){
     //allocation
     case 1:
-      printf("Testing OCM allocation with local buffer of size %4f MB and remote buffer of size %4f MB\n", local_size_MB, rem_size_MB);
+      printf("Testing IB allocation with local buffer of size %4f MB and remote buffer of size %4f MB\n", local_size_MB, rem_size_MB);
       if(alloc_test(atoi(argv[2]),local_size_B, rem_size_B)){
         fprintf(stderr, "FAIL: allocation test\n");
-	return -1;
+        return -1;
       }
       else
-	printf("pass: allocation test\n");
-      break;     
-    //copy-onesided
+        printf("pass: allocation test\n");
+      break;
+      //copy-onesided
     case 2:
       if(copy_onesided_test(local_size_B,rem_size_B)){
-	fprintf(stderr, "FAIL: allocation test\n");
-	return -1;
+        fprintf(stderr, "FAIL: allocation test\n");
+        return -1;
       }
       else
-	printf("pass: copy one-sided test\n");
+        printf("pass: copy one-sided test\n");
       break;
-    //copy-twosided
+      //copy-twosided
     case 3:
       if(copy_twosided_test(local_size_B, rem_size_B)){
-	fprintf(stderr, "FAIL: copy twosided test\n");
-	return -1;
+        fprintf(stderr, "FAIL: copy twosided test\n");
+        return -1;
       }
       else
-	printf("pass: copy two-sided test\n");
+        printf("pass: copy two-sided test\n");
+      break;
+    case 4:
+      
+      num_iter=atoi(argv[2]);
+      printf("Calling R/W bandwidth test with %d iterations for each size\n", num_iter);
+
+      if(read_write_bw_test(num_iter)){
+        fprintf(stderr, "FAIL: read/write bw test\n");
+        return -1;
+      }
+      else
+        printf("pass: read/write bw test\n");
       break;
     default:
       goto usage;
   }
-  return 0;	
+  return 0;
 }
