@@ -73,6 +73,9 @@ ocm_alloc_t ocm_alloc(ocm_alloc_param_t alloc_param);
 int ocm_free(ocm_alloc_t a);
 int ocm_extoll_disconnect(ocm_alloc_t a);
 
+//Read from a global timing struct in the lib.c file 
+void ocm_transfer_time(uint64_t* host_transfer_ns, uint64_t* gpu_transfer_ns);
+
 /* get pointer to local buffer */
 int ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len);
 

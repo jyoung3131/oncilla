@@ -22,6 +22,7 @@
 #ifdef CUDA
 #include <cuda.h>
 #include <cuda_runtime.h> 
+
 #endif
 
 #ifdef EXTOLL
@@ -29,6 +30,7 @@
 #endif
 
 /* Globals */
+#include <util/timer.h>
 
 /* Internal definitions */
 
@@ -73,11 +75,25 @@ struct lib_alloc {
 	} u;
 };
 
+struct ocm_timer {
+	//time to transfer data to the host
+	uint64_t host_transfer_ns;
+	//time to transfer data from the host to the GPU
+	uint64_t gpu_transfer_ns;
+};
+
+typedef struct ocm_timer * ocm_timer_t;
+
+static ocm_timer_t transfer_timer;
+
+
+
 
 /* Internal state */
 
 static LIST_HEAD(allocs); /* list of lib_alloc */
 static pthread_mutex_t allocs_lock = PTHREAD_MUTEX_INITIALIZER;
+
 
 #define for_each_alloc(alloc, allocs) \
 	list_for_each_entry(alloc, &allocs, link)
@@ -108,6 +124,9 @@ ocm_init(void)
 	if (tries <= 0)
 		goto out;
 	attached = true;
+
+	printd("Internal timing enabled!\n");
+	transfer_timer = (ocm_timer_t)calloc(1, sizeof(struct ocm_timer));
 
 #ifdef INFINIBAND
 	if (ib_init()) {
@@ -152,6 +171,8 @@ ocm_tini(void)
 	if (pmsg_close())
 		goto out;
 	ret = 0;
+
+	free(transfer_timer);
 out:
 	printd("detach from daemon: %s\n", (ret ? "fail" : "success"));
 	return ret;
@@ -176,124 +197,166 @@ enum ocm_kind ocm_alloc_kind(ocm_alloc_t alloc)
 {
 	return alloc->kind;
 }
+
+//Return the saved timer value
+void ocm_transfer_time(uint64_t* host_transfer_ns, uint64_t* gpu_transfer_ns)
+{
+	*host_transfer_ns = transfer_timer->host_transfer_ns;
+	*gpu_transfer_ns = transfer_timer->gpu_transfer_ns;
+}
+
 	ocm_alloc_t
 ocm_alloc(ocm_alloc_param_t alloc_param)
 {
-	struct message msg;
-	struct lib_alloc *alloc;
-	int ret = -1;
+  struct message msg;
+  struct lib_alloc *alloc;
+  int ret = -1;
 
-	alloc = calloc(1, sizeof(*alloc));
-	if (!alloc)
-		goto out;
+  alloc = calloc(1, sizeof(*alloc));
+  if (!alloc)
+    goto out;
 
-	msg.type        = MSG_REQ_ALLOC;
-	msg.status      = MSG_REQUEST;
-	msg.pid         = getpid();
-	//Specify the allocation size of the remote buffer; in
-	//the local case the local_alloc_bytes field is used since
-	//we will end up making a local allocation
-	msg.u.req.bytes = alloc_param->rem_alloc_bytes;
+  msg.type        = MSG_REQ_ALLOC;
+  msg.status      = MSG_REQUEST;
+  msg.pid         = getpid();
+  //Specify the allocation size of the remote buffer; in
+  //the local case the local_alloc_bytes field is used since
+  //we will end up making a local allocation
+  msg.u.req.bytes = alloc_param->rem_alloc_bytes;
 
-	if (alloc_param->kind == OCM_LOCAL_HOST)
-	{
-		msg.u.req.type = ALLOC_MEM_HOST;
-		msg.u.req.bytes = alloc_param->local_alloc_bytes;
-	}
-	else if(alloc_param->kind == OCM_LOCAL_GPU)
-	{
-		msg.u.req.type = ALLOC_MEM_GPU;
-		msg.u.req.bytes = alloc_param->local_alloc_bytes;
-	}
-	else if (alloc_param->kind == OCM_REMOTE_RDMA)
-		msg.u.req.type = ALLOC_MEM_RDMA;
-	else if (alloc_param->kind == OCM_REMOTE_RMA)
-		msg.u.req.type = ALLOC_MEM_RMA;
-	else
-	{
-		printf("No allocation type specified\n");
-		goto out;
-	}
+  if (alloc_param->kind == OCM_LOCAL_HOST)
+  {
+    msg.u.req.type = ALLOC_MEM_HOST;
+    msg.u.req.bytes = alloc_param->local_alloc_bytes;
+  }
+  else if(alloc_param->kind == OCM_LOCAL_GPU)
+  {
+    msg.u.req.type = ALLOC_MEM_GPU;
+    msg.u.req.bytes = alloc_param->local_alloc_bytes;
+  }
+  else if (alloc_param->kind == OCM_REMOTE_RDMA)
+    msg.u.req.type = ALLOC_MEM_RDMA;
+  else if (alloc_param->kind == OCM_REMOTE_RMA)
+    msg.u.req.type = ALLOC_MEM_RMA;
+  else
+  {
+    printf("No allocation type specified\n");
+    goto out;
+  }
 
-	printd("sending req_alloc to daemon\n");
-	if (pmsg_send(PMSG_DAEMON_PID, &msg))
-		goto out;
+  printd("sending req_alloc to daemon\n");
+  if (pmsg_send(PMSG_DAEMON_PID, &msg))
+    goto out;
 
-	printd("waiting for reply from daemon\n");
-	if (pmsg_recv(&msg, true))
-		goto out;
-	BUG(msg.type != MSG_RELEASE_APP);
+  printd("waiting for reply from daemon\n");
+  if (pmsg_recv(&msg, true))
+    goto out;
+  BUG(msg.type != MSG_RELEASE_APP);
 
-	if (msg.u.alloc.type == ALLOC_MEM_HOST) {
-		printd("ALLOC_MEM_HOST %lu bytes\n", msg.u.alloc.bytes);
-		alloc->kind             = OCM_LOCAL_HOST;
-		alloc->u.local.bytes    = msg.u.alloc.bytes;
-		alloc->u.local.ptr      = malloc(msg.u.alloc.bytes);
-		if (!alloc->u.local.ptr)
-			goto out;
-	}
+  if (msg.u.alloc.type == ALLOC_MEM_HOST) {
+    printd("ALLOC_MEM_HOST %lu bytes\n", msg.u.alloc.bytes);
+    alloc->kind             = OCM_LOCAL_HOST;
+    alloc->u.local.bytes    = msg.u.alloc.bytes;
+    #ifdef TIMING
+    uint64_t malloc_ns=0;
+    TIMER_DECLARE1(malloc_timer);
+    TIMER_START(malloc_timer);
+    #endif 
+    alloc->u.local.ptr      = malloc(msg.u.alloc.bytes);
+    #ifdef TIMING
+    TIMER_END(malloc_timer, malloc_ns);
+    printf("Malloc time : %lu ns \n", malloc_ns);
+    #endif
+    if (!alloc->u.local.ptr)
+      goto out;
+  }
 #ifdef CUDA
-	else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
-		printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
-
-		INIT_LIST_HEAD(&alloc->link);
-		alloc->kind             = OCM_LOCAL_GPU;
-		alloc->u.gpu.bytes    = msg.u.alloc.bytes;
-
-		alloc->u.gpu.cuda_ptr = NULL;
-
-		cudaError_t cudaErr = cudaMalloc((void**)&(alloc->u.gpu.cuda_ptr), msg.u.alloc.bytes);
-		if (cudaErr != 0)
-		{
-			printd("CUDA malloc error was %d \n", cudaErr);
-			goto out;
-		}
-
-		printd("adding new alloc to list\n");
-		lock_allocs();
-		list_add(&alloc->link, &allocs);
-		unlock_allocs();
-	}
+  else if (msg.u.alloc.type == ALLOC_MEM_GPU) {
+    printd("ALLOC_MEM_GPU %lu bytes\n", msg.u.alloc.bytes);
+  
+    INIT_LIST_HEAD(&alloc->link);
+    alloc->kind             = OCM_LOCAL_GPU;
+    alloc->u.gpu.bytes    = msg.u.alloc.bytes;
+   
+    alloc->u.gpu.cuda_ptr = NULL;
+   
+    #ifdef TIMING
+    uint64_t cudaMalloc_ns=0;
+    TIMER_DECLARE1(cudaMalloc_timer);
+    TIMER_START(cudaMalloc_timer);
+    #endif 
+    if(cudaMalloc((void**)&(alloc->u.gpu.cuda_ptr), msg.u.alloc.bytes)==cudaErrorMemoryAllocation)
+    {
+      goto out;
+    }
+    
+    #ifdef TIMING
+    TIMER_END(cudaMalloc_timer, cudaMalloc_ns);
+    printf("cudaMalloc time : %lu ns \n", cudaMalloc_ns);
+    #endif
+    printd("adding new alloc to list\n");
+    lock_allocs();
+    list_add(&alloc->link, &allocs);
+    unlock_allocs();
+  }
 
 #endif
 #ifdef INFINIBAND
-	else if (msg.u.alloc.type == ALLOC_MEM_RDMA) {
-		printd("ALLOC_MEM_RDMA %lu bytes\n", msg.u.alloc.bytes);
-		struct ib_params p;
-		p.addr      = strdup(msg.u.alloc.u.rdma.ib_ip);
-		p.port      = msg.u.alloc.u.rdma.port;
-		p.buf_len   = alloc_param->local_alloc_bytes;
-		p.buf       = malloc(p.buf_len);
-		if (!p.buf)
-			goto out;
+  else if (msg.u.alloc.type == ALLOC_MEM_RDMA) {
+    printd("ALLOC_MEM_RDMA %lu bytes\n", msg.u.alloc.bytes);
+    struct ib_params p;
+    p.addr      = strdup(msg.u.alloc.u.rdma.ib_ip);
+    p.port      = msg.u.alloc.u.rdma.port;
+    p.buf_len   = alloc_param->local_alloc_bytes;
+    #ifdef TIMING
+    uint64_t mal_ns=0;
+    TIMER_DECLARE1(mal_timer);
+    TIMER_START(mal_timer);
+    #endif
+    p.buf       = malloc(p.buf_len);
+    #ifdef TIMING
+    TIMER_END(mal_timer, mal_ns);
+    printf("IB Malloc time: %lu\n", mal_ns);
+    #endif
+    if (!p.buf)
+      goto out;
 
-		printd("RDMA: local buf %lu bytes <-->"
-				" server %s:%d (rank%d) buf %lu bytes\n",
-				p.buf_len, p.addr, p.port,
-				msg.u.alloc.remote_rank, msg.u.alloc.bytes);
+    printd("RDMA: local buf %lu bytes <-->"
+        " server %s:%d (rank%d) buf %lu bytes\n",
+        p.buf_len, p.addr, p.port,
+        msg.u.alloc.remote_rank, msg.u.alloc.bytes);
 
-		alloc->u.rdma.ib = ib_new(&p);
-		if (!alloc->u.rdma.ib)
-			goto out;
+    alloc->u.rdma.ib = ib_new(&p);
+    if (!alloc->u.rdma.ib)
+      goto out;
 
-		INIT_LIST_HEAD(&alloc->link);
-		alloc->kind                 = OCM_REMOTE_RDMA;
-		alloc->u.rdma.remote_rank   = msg.u.alloc.remote_rank;
-		alloc->u.rdma.remote_bytes  = msg.u.alloc.bytes;
-		alloc->u.rdma.local_bytes   = p.buf_len;
-		alloc->u.rdma.local_ptr     = p.buf;
+    INIT_LIST_HEAD(&alloc->link);
+    alloc->kind                 = OCM_REMOTE_RDMA;
+    alloc->u.rdma.remote_rank   = msg.u.alloc.remote_rank;
+    alloc->u.rdma.remote_bytes  = msg.u.alloc.bytes;
+    alloc->u.rdma.local_bytes   = p.buf_len;
+    alloc->u.rdma.local_ptr     = p.buf;
 
-		if (ib_connect(alloc->u.rdma.ib, false))
-			goto out;
+    #ifdef TIMING
+    uint64_t ib_con_ns=0;
+    TIMER_DECLARE1(ib_con_timer);
+    TIMER_START(ib_con_timer);
+    #endif
+    if (ib_connect(alloc->u.rdma.ib, false))
+      goto out;
+    #ifdef TIMING
+    TIMER_END(ib_con_timer, ib_con_ns);
+    printf("ib connection time: %lu\n", ib_con_ns);
+    #endif
 
-		printd("adding new alloc to list\n");
-		lock_allocs();
-		list_add(&alloc->link, &allocs);
-		unlock_allocs();
+    printd("adding new alloc to list\n");
+    lock_allocs();
+    list_add(&alloc->link, &allocs);
+    unlock_allocs();
 
-		free(p.addr);
-		p.addr = NULL;
-	}
+    free(p.addr);
+    p.addr = NULL;
+  }
 #endif 
 
 #ifdef EXTOLL
@@ -311,8 +374,16 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 				" (remote rank%d) buf %lu bytes\n",
 				p.buf_len, 
 				msg.u.alloc.remote_rank, msg.u.alloc.bytes);
-
+   #ifdef TIMING
+   uint64_t ex_new_ns=0;
+   TIMER_DECLARE1(ex_new_timer);
+   TIMER_START(ex_new_timer);
+   #endif
 		alloc->u.rma.ex = extoll_new(&p);
+   #ifdef TIMING
+   TIMER_END(ex_new_timer,ex_new_ns);
+   printf("extoll_new time: %lu\n", ex_new_ns);
+   #endif
 		if (!alloc->u.rma.ex)
 			goto out;
 
@@ -322,8 +393,17 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 		alloc->u.rma.remote_bytes  = msg.u.alloc.bytes;
 		alloc->u.rma.local_bytes   = p.buf_len;
 
+    #ifdef TIMING
+    uint64_t extoll_con_ns=0;
+    TIMER_DECLARE1(extoll_con_timer);
+    TIMER_START(extoll_con_timer);
+    #endif
 		if (extoll_connect(alloc->u.rma.ex, false))
 			goto out;
+    #ifdef TIMING
+    TIMER_END(extoll_con_timer, extoll_con_ns);
+    printf("extoll connection time: %lu\n", extoll_con_ns);
+    #endif
 
 		//Once the connection is complete the buffer is allocated
 		alloc->u.rma.local_ptr = alloc->u.rma.ex->rma_conn.buf;
@@ -449,6 +529,12 @@ int ocm_copy_in(ocm_alloc_t dest, void *src)
 ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 {
 
+	#ifdef CUDA
+	TIMER_DECLARE1(host_timer);
+	TIMER_DECLARE1(gpu_timer);
+	uint64_t tmp_ns = 0;
+	cudaError_t cudaErr;
+	#endif
 	//For read operations just reverse the order of the parameters
 	if (!cp_param->op_flag)
 	{
@@ -470,7 +556,8 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			//Do a memcpy to the local buffer and then write to the remote
 			//IB buffer
 			memcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
-			ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
+			if(ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes)||ib_poll(dest->u.rdma.ib))
+        return -1;
 		}
 #endif
 #ifdef EXTOLL
@@ -485,7 +572,16 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 #ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
-			cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
+			TIMER_START(gpu_timer);
+			cudaErr = cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
+			if(cudaErr)
+			{
+				printf("cudaMemcpy failed with error %d \n", cudaErr);
+				return -1;
+      }
+      TIMER_END(gpu_timer, tmp_ns);
+			TIMER_CLEAR(gpu_timer);
+			transfer_timer->gpu_transfer_ns += tmp_ns;
 		}
 #endif
 		else
@@ -499,15 +595,36 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 		//Do a read from the remote IB buffer and then memcpy to the local buffer
 		if(dest->kind == OCM_LOCAL_HOST)
 		{
-			ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
+      //Remember to call both ib_read and ib_poll in order to correctly measure the time taken for the transfer
+			if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib))
+        return -1;
 			memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rdma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
 		}
 #ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
-			ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
-			cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rdma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
+			TIMER_START(host_timer);
+      //Remember to call both ib_read and ib_poll in order to correctly measure the time taken for the transfer
+			if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib))
+				return -1;
+			TIMER_END(host_timer, tmp_ns);
+			TIMER_CLEAR(host_timer);
+			transfer_timer->host_transfer_ns += tmp_ns;
+      printd("Total host time %lu ns and this time %lu ns\n",  transfer_timer->host_transfer_ns, tmp_ns);
+
+			TIMER_START(gpu_timer);
+			cudaErr = cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rdma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
+			if(cudaErr)
+			{
+				printf("cudaMemcpy failed with error %d \n", cudaErr);
+				return -1;
+			}
+			
+			TIMER_END(gpu_timer, tmp_ns);
+			TIMER_CLEAR(gpu_timer);
+			transfer_timer->gpu_transfer_ns += tmp_ns;
+
 		}
 #endif
 		else
@@ -529,8 +646,28 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 #ifdef CUDA
 		else if(dest->kind == OCM_LOCAL_GPU)
 		{
-			extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes);
-			cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
+			TIMER_START(host_timer);
+			if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+			{
+				printf("extoll_read failed in ocm_copy\n");
+				return -1;
+			}
+			TIMER_END(host_timer, tmp_ns);
+			TIMER_CLEAR(host_timer);
+			transfer_timer->host_transfer_ns += tmp_ns;
+
+
+			TIMER_START(gpu_timer);
+			cudaErr = cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
+			if(cudaErr)
+                        {
+                                printf("cudaMemcpy failed with error %d \n", cudaErr);
+                                return -1;
+                        }
+
+			TIMER_END(gpu_timer, tmp_ns);
+			TIMER_CLEAR(gpu_timer);
+			transfer_timer->gpu_transfer_ns += tmp_ns;
 		}
 #endif
 		else
@@ -551,7 +688,8 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 		else if(dest->kind == OCM_REMOTE_RDMA)
 		{
 			cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyDeviceToHost);
-			ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
+			if(ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes)||ib_poll(dest->u.rdma.ib))
+        return -1;
 
 		}
 #endif
@@ -562,20 +700,15 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 			extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
 		}
 #endif
-		else
-		{
-			BUG(1);
-		}
 	}
 #endif
 	else
 	{
 		BUG(1);
 	}
-
 	return 0;
-
 }
+
 
 
 	int
@@ -594,7 +727,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 	if (cp_param->op_flag)
 	{
 
-		if(ib_write(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+		if(ib_write(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib))
 		{
 			printf("write failed\n");
 			return -1;
@@ -602,13 +735,12 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 	}
 	else
 	{
-		if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+		if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib))
 		{
 			printf("read failed\n");
 			return -1;
 		}
 	}
-	return 0;
 #endif
 #ifdef EXTOLL
 	if(cp_param->bytes > src->u.rma.local_bytes)

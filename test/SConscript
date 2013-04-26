@@ -20,6 +20,9 @@ cpath = [os.getcwd() + '/../inc']
 libpath.extend(['../lib'])
 libs.extend(['ocm','m'])
 
+if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
+      ccflags.extend(['-DTIMING'])
+
 if int(ARGUMENTS.get('debug', 0)): # 
     ccflags.append(['-ggdb', '-O0'])
     #Be careful using memcheck as it seems like it may affect some buffer used in the IB CM process.

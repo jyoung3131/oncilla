@@ -26,6 +26,7 @@
 
 /* Project includes */
 #include <util/list.h>
+#include <util/timer.h>
 #include <io/rdma.h>
 #include <debug.h>
 
@@ -46,6 +47,11 @@ static LIST_HEAD(ib_allocs);
 static int
 post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset, size_t len)
 {
+    TIMER_DECLARE1(ib_timer);
+    #ifdef TIMING
+    uint64_t ib_send_ns = 0;
+    #endif
+
     struct ibv_sge          sge;
     struct ibv_send_wr      wr;
     struct ibv_send_wr      *bad_wr;
@@ -70,10 +76,15 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
     wr.wr.rdma.rkey         = ib->ibv.buf_rkey;
     wr.wr.rdma.remote_addr  = ib->ibv.buf_va + dest_offset;
 
+    TIMER_START(ib_timer);
     if (ibv_post_send(ib->rdma.id->qp, &wr, &bad_wr)){
         perror("ibv_post_send");
         return -1;
     }
+    TIMER_END(ib_timer, ib_send_ns);
+    TIMER_CLEAR(ib_timer);
+    printf("Time to post %lu bytes: %lu \n", len, ib_send_ns);
+
 
     return 0;
 }
@@ -264,6 +275,12 @@ ib_poll(ib_t ib)
     struct ibv_cq   *evt_cq;
     void            *cq_ctxt;
     int             ne;
+    TIMER_DECLARE1(ib_timer);
+    #ifdef TIMING
+    uint64_t ib_send_ns = 0;
+    #endif
+
+    TIMER_START(ib_timer);
 
     if (ibv_req_notify_cq(ib->verbs.cq, 0))
         return -1;
@@ -280,7 +297,9 @@ ib_poll(ib_t ib)
         ne = ibv_poll_cq(ib->verbs.cq, 1, &wc);
 
         if (ne == 0)
+        {
             continue;
+        }
         else if (ne < 0)
             return -1;
 
@@ -288,6 +307,9 @@ ib_poll(ib_t ib)
             return -1;
 
     } while (ne);
+    TIMER_END(ib_timer, ib_send_ns);
+    TIMER_CLEAR(ib_timer);
+            printf("Time to poll bytes: %lu \n", ib_send_ns);
 
     return 0;
 }
