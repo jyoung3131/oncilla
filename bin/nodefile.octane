@@ -1,0 +1,3 @@
+ethernet_ip ocm_port rdmacm_port
+0 octane1 143.215.131.234 12345 67890
+1 octane2 143.215.131.235 12345 67890
