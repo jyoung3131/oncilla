@@ -26,6 +26,7 @@
 
 /* Project includes */
 #include <util/list.h>
+#include <util/timer.h>
 #include <io/rdma.h>
 #include <debug.h>
 
@@ -46,6 +47,7 @@ static LIST_HEAD(ib_allocs);
 static int
 post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset, size_t len)
 {
+
     struct ibv_sge          sge;
     struct ibv_send_wr      wr;
     struct ibv_send_wr      *bad_wr;
@@ -74,6 +76,7 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
         perror("ibv_post_send");
         return -1;
     }
+
 
     return 0;
 }
@@ -265,6 +268,7 @@ ib_poll(ib_t ib)
     void            *cq_ctxt;
     int             ne;
 
+
     if (ibv_req_notify_cq(ib->verbs.cq, 0))
         return -1;
 
@@ -280,7 +284,9 @@ ib_poll(ib_t ib)
         ne = ibv_poll_cq(ib->verbs.cq, 1, &wc);
 
         if (ne == 0)
+        {
             continue;
+        }
         else if (ne < 0)
             return -1;
 

@@ -3,9 +3,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <debug.h>
+#include <time.h>
 
 #include <io/extoll.h>
 #include "../src/extoll.h"
+#include <util/timer.h>
 #include <math.h>
 
 static unsigned int server_node_id;
@@ -33,8 +35,17 @@ static int teardown(extoll_t ex)
 {
   int ret = 0;
 
+  TIMER_DECLARE1(ex_disconnect_timer);
+  TIMER_START(ex_disconnect_timer);
+
   if (extoll_disconnect(ex, false/*is client*/))
     ret = 1;
+
+#ifdef TIMING
+  uint64_t extoll_teardown_ns = 0;
+  TIMER_END(ex_disconnect_timer, extoll_teardown_ns);
+  printf("[DISCONNECT] Time for extoll_disconnect: %lu ns\n", extoll_teardown_ns);
+#endif
 
   //Free the EXTOLL structure
   if(extoll_free(ex))
@@ -75,9 +86,17 @@ static int alloc_test(long long unsigned int size_B)
 /* write/read to/from remote memory timing test. */
 static int read_write_bw_test(uint64_t max_size_B)
 {
+  //timer variables
+  #ifdef TIMING
+  TIMER_DECLARE1(extoll_read_timer);
+  TIMER_DECLARE1(extoll_write_timer);
+  uint64_t extoll_write_time_ns = 0;
+  uint64_t extoll_read_time_ns = 0;
+  #endif
+
   extoll_t ex;
   struct extoll_params params;
-  
+
   unsigned long long len = max_size_B+1;
   long long unsigned int size_B=64;
   long long unsigned int size_B2= size_B;
@@ -98,23 +117,40 @@ static int read_write_bw_test(uint64_t max_size_B)
 
   while(size_B <= max_size_B){
     len=size_B;
-
+    #ifdef TIMING
+    printf("------- %llu bytes -------\n", size_B);
+    TIMER_START(extoll_write_timer);
+    #endif
     if(extoll_write(ex, 0, 0, len))
     {
       printf("write failed\n");
       return -1;
     }
+    #ifdef TIMING
+    TIMER_END(extoll_write_timer, extoll_write_time_ns);
+    TIMER_CLEAR(extoll_write_timer);
+    printf("[W] time to write %llu bytes: %lu \n", size_B, extoll_write_time_ns);
+    #endif
     size_B*=2;
   }
 
   // Perform read test
   while(size_B2 <= max_size_B){
     len=size_B2;
+    #ifdef TIMING
+    printf("------- %llu bytes -------\n", size_B2);
+    TIMER_START(extoll_read_timer);
+    #endif 
     if(extoll_read(ex, 0, 0, len))
     {
       printf("read failed\n");
       return -1;
     }
+    #ifdef TIMING
+    TIMER_END(extoll_read_timer, extoll_read_time_ns);
+    TIMER_CLEAR(extoll_read_timer);
+    printf("[R] time to read %llu bytes: %lu \n", size_B2, extoll_read_time_ns);
+    #endif
     size_B2*=2;
   }
   //Perform teardown
