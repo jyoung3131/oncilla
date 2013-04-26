@@ -48,7 +48,7 @@ if not env.GetOption('clean'):
     envcompilepath = 'extoll'
 
   #Search for the EXTOLL installation
-  if run('find /extoll2/include -name extolldrv.h', env):
+  if run('find /extoll2/include -maxdepth 1 -name \'extolldrv.h\'', env):
     print 'EXTOLL install not found\n'
     envcompilepath = 'ib'
 
@@ -124,6 +124,7 @@ else:
    else:
       compilepath = 'all'
       ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
+      cpath.extend(['/extoll2/include'])
 
 #Add IB libs if IB network is supported
 if compilepath == 'extoll':

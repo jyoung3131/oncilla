@@ -35,6 +35,7 @@ elif compilepath == 'extoll':
     cpath.extend(['/extoll2/include'])
 else:
     ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
+    cpath.extend(['/extoll2/include'])
 
 #Add RMA libs if EXTOLL network is supported
 #librma2 is located at /extoll2/lib/librma2.so
