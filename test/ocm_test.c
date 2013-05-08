@@ -117,8 +117,6 @@ usage:
 
 static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   ocm_alloc_t a;
-  void *buf;
-  size_t buf_len, remote_len;
   ocm_alloc_param_t alloc_params;
   ocm_param_t copy_params;
 
@@ -150,8 +148,10 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   copy_params->bytes = local_size_B;
   copy_params->op_flag = 0;
 
-  //Use a one-sided copy since we are copying from a local-remote IB
+  //Use a one-sided copy since we are copying from a local-remote IB or EXTOLL
   //paired object
+  
+  printf("Reading for size %lu\n", local_size_B);
   if(ocm_copy_onesided(a, copy_params)){
     printf("ocm_copy_onesided (read) failed\n");
     goto fail;
@@ -159,24 +159,16 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 
   copy_params->op_flag = 1;
 
+  printf("Writing for size %lu\n", local_size_B);
   if(ocm_copy_onesided(a, copy_params)){
     printf("ocm_copy_onesided (write) failed\n");
     goto fail;
   } 
-
-  if (ocm_localbuf(a, &buf, &buf_len)) {
-    printf("ocm_localbuf failed\n");
-    goto fail;
-  }
-  printf("local buffer size %lu @ %p\n", buf_len, buf);
-
-  if (ocm_is_remote(a)) {
-    if (!ocm_remote_sz(a, &remote_len)) {
-      printf("alloc is remote; size = %lu\n", remote_len);
-    } else {
-      printf("alloc is local\n");
-    }
-  }
+  
+  #ifdef EXTOLL
+  if(ocm_extoll_disconnect(a))
+      goto fail;
+#endif
 
   free(alloc_params);
   free(copy_params);
