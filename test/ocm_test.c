@@ -4,6 +4,7 @@
 #include <oncillamem.h>
 #include <math.h>
 
+#include <util/timer.h>
 //Needed to explicitly close EXTOLL connections
 #ifdef EXTOLL
 #include <io/extoll.h>

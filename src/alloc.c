@@ -167,8 +167,8 @@ alloc_ate(struct alloc_ation *alloc)
 
     #ifdef EXTOLL
     else if (alloc->type == ALLOC_MEM_RMA) {
-      extoll_t ex;
-
+        extoll_t ex;
+        
         struct extoll_params p;
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
