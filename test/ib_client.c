@@ -7,7 +7,6 @@
 
 #include <io/rdma.h>
 #include "../src/rdma.h"
-#include <util/timer.h>
 #include <math.h>
 
 static char *serverIP = NULL;
@@ -34,17 +33,9 @@ static int teardown(ib_t ib)
 {
     int ret = 0;
 
-    TIMER_DECLARE1(ib_disconnect_timer);
-    TIMER_START(ib_disconnect_timer);
 
     if (ib_disconnect(ib, false/*is client*/))
       ret = 1;
-
-    #ifdef TIMING
-    uint64_t ib_teardown_ns = 0;
-    TIMER_END(ib_disconnect_timer, ib_teardown_ns);
-    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
-    #endif
    
     //Free the IB structure
     if(ib_free(ib))
@@ -86,13 +77,6 @@ static int alloc_test(long long unsigned int size_B)
 /* write/read to/from remote memory timing test. */
 static int read_write_bw_test()
 {
-    TIMER_DECLARE1(ib_read_timer);
-    TIMER_DECLARE1(ib_write_timer);
-    #ifdef TIMING
-    uint64_t ib_write_time_ns = 0;
-    uint64_t ib_read_time_ns = 0;
-    #endif
-    
 
     ib_t ib;
     struct ib_params params;
@@ -123,43 +107,25 @@ static int read_write_bw_test()
 
   while(size_B<=pow(2,32)){
 	len=size_B;
-	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B);
-	#endif
  
-	#ifdef TIMING
-	TIMER_START(ib_write_timer);
-	#endif
 	if(ib_write(ib, 0, 0, len)||ib_poll(ib))
 	{
 	    printf("write failed\n");
 	    return -1;
 	}
-	TIMER_END(ib_write_timer, ib_write_time_ns);
-	TIMER_CLEAR(ib_write_timer);
-	#ifdef TIMING
-	printf("[W] time to write %llu bytes: %lu \n", size_B, ib_write_time_ns);     
-	#endif 
 	memset(buf, 0, len);
     	size_B*=2;
 	}
 	// read back and wait for completion
       while(size_B2<=pow(2,32)){
-    	#ifdef TIMING
 	printf("------- %llu bytes -------\n", size_B2);
-	#endif
 	len=size_B2;
-	#ifdef TIMING
-	TIMER_START(ib_read_timer);
 	if(ib_read(ib, 0, 0, len)||ib_poll(ib))
 	{
 	    printf("read failed\n");
 	    return -1;
 	}
-	TIMER_END(ib_read_timer, ib_read_time_ns);
-	TIMER_CLEAR(ib_read_timer);
-	printf("[R] time to read %llu bytes: %lu \n", len, ib_read_time_ns);
-	#endif
 	
 	size_B2*=2;
 	}

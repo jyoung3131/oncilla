@@ -158,9 +158,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
         //rma2_noti_dump just prints out the notification so it is not neccessarily needed
         //Diable by default; check inc/debug.h on how to enable
 #ifdef __DEBUG_ENABLED  
-#ifndef TIMING
         rma2_noti_dump(ex->rma_conn.notification);
-#endif
 #endif
         //But notifications must be freed to process new notifications
         rma2_noti_free(ex->rma_conn.port,ex->rma_conn.notification);

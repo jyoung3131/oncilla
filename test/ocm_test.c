@@ -4,7 +4,6 @@
 #include <oncillamem.h>
 #include <math.h>
 
-#include <util/timer.h>
 //Needed to explicitly close EXTOLL connections
 #ifdef EXTOLL
 #include <io/extoll.h>
@@ -50,16 +49,9 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     default:
       goto usage;
   }
-#ifdef TIMING
-  uint64_t ocm_alloc_ns = 0;
-  TIMER_DECLARE1(ocm_alloc_timer);
-  TIMER_START(ocm_alloc_timer);
-#endif     
+  
   a = ocm_alloc(alloc_params);
-#ifdef TIMING
-  TIMER_END(ocm_alloc_timer, ocm_alloc_ns);
-  printf("Allocation time for %lu bytes: %lu ns\n", local_size_B, ocm_alloc_ns);
-#endif
+
   if (!a) {
     printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
     return -1;

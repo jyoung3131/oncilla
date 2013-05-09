@@ -30,7 +30,6 @@
 #endif
 
 /* Globals */
-#include <util/timer.h>
 
 /* Internal definitions */
 
@@ -75,18 +74,6 @@ struct lib_alloc {
 	} u;
 };
 
-struct ocm_timer {
-	//time to transfer data to the host
-	uint64_t host_transfer_ns;
-	//time to transfer data from the host to the GPU
-	uint64_t gpu_transfer_ns;
-};
-
-typedef struct ocm_timer * ocm_timer_t;
-
-static ocm_timer_t transfer_timer;
-
-
 
 
 /* Internal state */
@@ -124,9 +111,6 @@ ocm_init(void)
 	if (tries <= 0)
 		goto out;
 	attached = true;
-
-	printd("Internal timing enabled!\n");
-	transfer_timer = (ocm_timer_t)calloc(1, sizeof(struct ocm_timer));
 
 #ifdef INFINIBAND
 	if (ib_init()) {
@@ -172,7 +156,6 @@ ocm_tini(void)
 		goto out;
 	ret = 0;
 
-	free(transfer_timer);
 out:
 	printd("detach from daemon: %s\n", (ret ? "fail" : "success"));
 	return ret;
@@ -196,13 +179,6 @@ int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
 enum ocm_kind ocm_alloc_kind(ocm_alloc_t alloc)
 {
 	return alloc->kind;
-}
-
-//Return the saved timer value
-void ocm_transfer_time(uint64_t* host_transfer_ns, uint64_t* gpu_transfer_ns)
-{
-	*host_transfer_ns = transfer_timer->host_transfer_ns;
-	*gpu_transfer_ns = transfer_timer->gpu_transfer_ns;
 }
 
 	ocm_alloc_t
@@ -257,16 +233,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     printd("ALLOC_MEM_HOST %lu bytes\n", msg.u.alloc.bytes);
     alloc->kind             = OCM_LOCAL_HOST;
     alloc->u.local.bytes    = msg.u.alloc.bytes;
-    #ifdef TIMING
-    uint64_t malloc_ns=0;
-    TIMER_DECLARE1(malloc_timer);
-    TIMER_START(malloc_timer);
-    #endif 
     alloc->u.local.ptr      = malloc(msg.u.alloc.bytes);
-    #ifdef TIMING
-    TIMER_END(malloc_timer, malloc_ns);
-    printf("Malloc time : %lu ns \n", malloc_ns);
-    #endif
     if (!alloc->u.local.ptr)
       goto out;
   }
@@ -280,20 +247,11 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
    
     alloc->u.gpu.cuda_ptr = NULL;
    
-    #ifdef TIMING
-    uint64_t cudaMalloc_ns=0;
-    TIMER_DECLARE1(cudaMalloc_timer);
-    TIMER_START(cudaMalloc_timer);
-    #endif 
     if(cudaMalloc((void**)&(alloc->u.gpu.cuda_ptr), msg.u.alloc.bytes)==cudaErrorMemoryAllocation)
     {
       goto out;
     }
     
-    #ifdef TIMING
-    TIMER_END(cudaMalloc_timer, cudaMalloc_ns);
-    printf("cudaMalloc time : %lu ns \n", cudaMalloc_ns);
-    #endif
     printd("adding new alloc to list\n");
     lock_allocs();
     list_add(&alloc->link, &allocs);
@@ -308,16 +266,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     p.addr      = strdup(msg.u.alloc.u.rdma.ib_ip);
     p.port      = msg.u.alloc.u.rdma.port;
     p.buf_len   = alloc_param->local_alloc_bytes;
-    #ifdef TIMING
-    uint64_t mal_ns=0;
-    TIMER_DECLARE1(mal_timer);
-    TIMER_START(mal_timer);
-    #endif
     p.buf       = malloc(p.buf_len);
-    #ifdef TIMING
-    TIMER_END(mal_timer, mal_ns);
-    printf("IB Malloc time: %lu\n", mal_ns);
-    #endif
     if (!p.buf)
       goto out;
 
@@ -337,17 +286,8 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     alloc->u.rdma.local_bytes   = p.buf_len;
     alloc->u.rdma.local_ptr     = p.buf;
 
-    #ifdef TIMING
-    uint64_t ib_con_ns=0;
-    TIMER_DECLARE1(ib_con_timer);
-    TIMER_START(ib_con_timer);
-    #endif
     if (ib_connect(alloc->u.rdma.ib, false))
       goto out;
-    #ifdef TIMING
-    TIMER_END(ib_con_timer, ib_con_ns);
-    printf("ib connection time: %lu\n", ib_con_ns);
-    #endif
 
     printd("adding new alloc to list\n");
     lock_allocs();
@@ -374,16 +314,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 				" (remote rank%d) buf %lu bytes\n",
 				p.buf_len, 
 				msg.u.alloc.remote_rank, msg.u.alloc.bytes);
-   #ifdef TIMING
-   uint64_t ex_new_ns=0;
-   TIMER_DECLARE1(ex_new_timer);
-   TIMER_START(ex_new_timer);
-   #endif
 		alloc->u.rma.ex = extoll_new(&p);
-   #ifdef TIMING
-   TIMER_END(ex_new_timer,ex_new_ns);
-   printf("extoll_new time: %lu\n", ex_new_ns);
-   #endif
 		if (!alloc->u.rma.ex)
 			goto out;
 
@@ -393,17 +324,8 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 		alloc->u.rma.remote_bytes  = msg.u.alloc.bytes;
 		alloc->u.rma.local_bytes   = p.buf_len;
 
-    #ifdef TIMING
-    uint64_t extoll_con_ns=0;
-    TIMER_DECLARE1(extoll_con_timer);
-    TIMER_START(extoll_con_timer);
-    #endif
 		if (extoll_connect(alloc->u.rma.ex, false))
 			goto out;
-    #ifdef TIMING
-    TIMER_END(extoll_con_timer, extoll_con_ns);
-    printf("extoll connection time: %lu\n", extoll_con_ns);
-    #endif
 
 		//Once the connection is complete the buffer is allocated
 		alloc->u.rma.local_ptr = alloc->u.rma.ex->rma_conn.buf;

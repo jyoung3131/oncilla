@@ -26,7 +26,6 @@
 
 /* Project includes */
 #include <util/list.h>
-#include <util/timer.h>
 #include <io/rdma.h>
 #include <debug.h>
 
