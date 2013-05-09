@@ -35,6 +35,7 @@ if compilepath == 'ib':
     ccflags.extend(['-DINFINIBAND'])
 elif compilepath == 'extoll':
     ccflags.extend(['-DEXTOLL'])
+    cpath.extend(['/extoll2/include'])
 else:
     ccflags.extend(['-DINFINIBAND','-DEXTOLL'])
 
