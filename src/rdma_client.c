@@ -200,6 +200,12 @@ ib_client_disconnect(struct ib_alloc *ib)
 
   int rc = 0;
 
+  if (rdma_disconnect(ib->rdma.id))
+  {
+    fprintf(stderr, "failed to disconnect RDMA connection\n");
+    rc = 1;
+  }
+
 
   //Destroy the queue pair - returns void
   rdma_destroy_qp(ib->rdma.id);

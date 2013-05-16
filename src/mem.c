@@ -34,6 +34,8 @@
 /* Internal state */
 static int myrank = -1;
 
+static int ib_port = 67980;
+
 /* TODO need list representing pending alloc requests */
 
 static struct queue *outbox; /* msgs intended for apps  (to pmsg) */
@@ -255,6 +257,9 @@ inbound_thread(void *arg)
              * initiate connection to us. Then listen for connections.
              * XXX possible race condition
              */
+            msg.u.alloc.u.rdma.port = ib_port;
+            ib_port += 1;
+
             ret = conn_put(conn, &msg, sizeof(msg));
             if (--ret < 0)
                 break;

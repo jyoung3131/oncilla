@@ -17,10 +17,10 @@ static ib_t setup(struct ib_params *p)
 	if (!(ib = ib_new(p)))
 		return (ib_t)NULL;
 
-  //We don't time this function because it has several blocking
-  //statements within which provide a false picture of timing.
-  if (ib_connect(ib, true/*is server*/))
-	return (ib_t)NULL;
+	//We don't time this function because it has several blocking
+	//statements within which provide a false picture of timing.
+	if (ib_connect(ib, true/*is server*/))
+		return (ib_t)NULL;
 
 	return ib;
 }
@@ -28,16 +28,14 @@ static ib_t setup(struct ib_params *p)
 //Return 0 on success and -1 on failure
 static int teardown(ib_t ib)
 {
-  int ret = 0;
-  
-  uint64_t ib_teardown_ns = 0;
+	int ret = 0;
 
 	if (ib_disconnect(ib, true/*is server*/))
 		ret = -1;
-
-  //Free the IB structure
-  if(ib_free(ib))
-    ret = -1;
+	
+	//Free the IB structure
+	if(ib_free(ib))
+		ret = -1;
 
 	return 0;
 }
@@ -54,7 +52,7 @@ static int alloc_test(long long unsigned int size_B)
 
 	if (!(buf = calloc(len, sizeof(*buf))))
 		return -1;
-	
+
 	params.addr     = NULL;
 	params.port     = 12345;
 	params.buf      = buf;
@@ -63,8 +61,8 @@ static int alloc_test(long long unsigned int size_B)
 	if (!(ib = setup(&params)))
 		return -1;
 
-  if(teardown(ib) != 0)
-    return -1;
+	if(teardown(ib) != 0)
+		return -1;
 
 	/*Return 0 on success*/
 	return 0;
@@ -84,13 +82,13 @@ static int read_write_bw_test(void){
 	if (!(buf = calloc(count, sizeof(*buf))))
 		return -1;
 
-  printf("Daemon allocating %lu B or %3f GB of memory\n", len, ((double)count/pow(2,30.0)));
+	printf("Daemon allocating %lu B or %3f GB of memory\n", len, ((double)count/pow(2,30.0)));
 
 	params.addr     = NULL;
 	params.port     = 23456;
 	params.buf      = buf;
 	params.buf_len  = len;
-	
+
 	if (!(ib = setup(&params))){
 		printf("setup failed\n");
 		return -1;
@@ -100,10 +98,10 @@ static int read_write_bw_test(void){
 	while((getchar()!=EOF)){
 
 	}
-	
+
 	if(teardown(ib) != 0)
-	  return -1;
-	
+		return -1;
+
 	return 0;
 }
 
@@ -205,8 +203,8 @@ int main(int argc, char *argv[])
 	if (argc != 3) {
 usage:
 		fprintf(stderr, "Usage: %s <test_num> <alloc_size_MB>\n"
-       "\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write bandwidth daemon\n"
-       "\talloc_size: can be specified in any positive decimal format\n", argv[0]);
+				"\ttest_num: 0 = one-sided; 1 = buffer mismatch; 2 = alloc; 3 = read/write bandwidth daemon\n"
+				"\talloc_size: can be specified in any positive decimal format\n", argv[0]);
 
 		return -1;
 	}
@@ -214,11 +212,11 @@ usage:
 	double reg_size_MB = strtod(argv[2], 0);
 	uint64_t reg_size_B = (uint64_t)(reg_size_MB*pow(2,20));
 
-  if(reg_size_MB > 8000.0)
-  {
-    printf("Please pass a data size of less than 8000 MB\n");
-    return -1;
-  }
+	if(reg_size_MB > 8000.0)
+	{
+		printf("Please pass a data size of less than 8000 MB\n");
+		return -1;
+	}
 
 	switch (atoi(argv[1])) {
 		case 0:
@@ -246,13 +244,13 @@ usage:
 		case 3:
 			printf("Running daemon for read/write bandwidth test\n");
 			if(read_write_bw_test()){
-			    fprintf(stderr, "FAIL: read/write bandwidth test\n");
-			    return -1;
+				fprintf(stderr, "FAIL: read/write bandwidth test\n");
+				return -1;
 			} else
-			    printf("PASS: read/write bandwidth test\n");		
+				printf("PASS: read/write bandwidth test\n");		
 			break;
-    default:
-      goto usage;
+		default:
+			goto usage;
 	}
-  return 0;
+	return 0;
 }
