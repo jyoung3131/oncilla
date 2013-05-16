@@ -33,8 +33,9 @@
 
 /* Internal state */
 static int myrank = -1;
-
+#ifdef INFINIBAND
 static int ib_port = 67980;
+#endif
 
 /* TODO need list representing pending alloc requests */
 
