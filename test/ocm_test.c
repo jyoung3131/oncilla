@@ -16,9 +16,23 @@
 #include <cuda_runtime.h>
 #endif
 
+void print_usage(const char* prog_name)
+{
+    fprintf(stderr, "Usage: %s <which test> <allocation size 1 in MB (alloc1)> <allocation size 2 in MB (alloc2)> "
+        "<suboption1_allocation_type> <suboption2_test4_num_iter>\n"
+        "\tWhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided; 4=read/write BW\n"
+        "\t\tSuboptions for test 1: 1=allocate host memory; 2=allocate GPU memory; \n"
+        "\t\t\t\t3=allocate IB buffer (alloc1-local, alloc2-remote); 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n"
+        "\t\tSuboptions for test 4: type of allocation (IB=0, EXTOLL=1); number iterations\n\n"
+        "\tEx: Test 1 with IB memory: %s 1 10.0 10.0 3\n"
+        "\tEx: Test 2 with 10 MB memory: %s 2 10.0 10.0\n"
+        "\tEx: Test 3 with 10 MB memory: %s 3 10.0 10.0\n"
+        "\tEx: Test 4 BW test for EXTOLL, 5 iterations: %s 4 1 5\n", prog_name, prog_name, prog_name, prog_name, prog_name);
+}
 
 static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B){
   ocm_alloc_t a;
+  //ocm_alloc_t b, c;
   void *buf;
   size_t buf_len, remote_len;
   ocm_alloc_param_t alloc_params;
@@ -35,20 +49,24 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   switch (suboption){
     case 1:
       alloc_params->kind = OCM_LOCAL_HOST;
+      printf("Testing allocation of local memory\n");
       break;
     case 2:
       alloc_params->kind = OCM_LOCAL_GPU;
+      printf("Testing allocation of local GPU memory\n");
       break;
     case 3:
       alloc_params->kind = OCM_REMOTE_RDMA;
       alloc_params->rem_alloc_bytes = rem_size_B;
+      printf("Testing allocation of remote IB memory\n");
       break;
     case 4:
       alloc_params->kind = OCM_REMOTE_RMA;
       alloc_params->rem_alloc_bytes = rem_size_B;
+      printf("Testing allocation of remote EXTOLL memory\n");
       break;
     default:
-      goto usage;
+      print_usage("ocm_test");
   }
 #ifdef TIMING
   uint64_t ocm_alloc_ns = 0;
@@ -56,10 +74,9 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   TIMER_START(ocm_alloc_timer);
 #endif     
   a = ocm_alloc(alloc_params);
-#ifdef TIMING
-  TIMER_END(ocm_alloc_timer, ocm_alloc_ns);
-  printf("Allocation time for %lu bytes: %lu ns\n", local_size_B, ocm_alloc_ns);
-#endif
+  //b = ocm_alloc(alloc_params);
+  //c = ocm_alloc(alloc_params);
+
   if (!a) {
     printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
     return -1;
@@ -105,14 +122,6 @@ fail:
   free(alloc_params);
   if (0 > ocm_tini())
     printf("ocm_tini failed\n");
-  return -1;
-
-usage:
-  fprintf(stderr, "Usage:  <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
-      " <allocation size 2 in MB (alloc2)>\n "
-      "\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided\n" 
-      "\tSuboptions for test 1: 1=allocate host memory; 2=allocate GPU memory; 3=allocate IB buffer (alloc1-local, alloc2-remote)\n"
-      " \t\t 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n");
   return -1;
 }
 
@@ -304,7 +313,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   return 0;
 }
 
-static int read_write_bw_test(int num_iter){
+static int read_write_bw_test(int num_iter, int alloc_type){
   ocm_alloc_t a;
 
   ocm_alloc_param_t alloc_params;
@@ -323,7 +332,10 @@ static int read_write_bw_test(int num_iter){
   alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
   alloc_params->local_alloc_bytes = alloc_size_B;
   alloc_params->rem_alloc_bytes = alloc_size_B;
-  alloc_params->kind = OCM_REMOTE_RDMA;
+  if(alloc_type == 0)
+    alloc_params->kind = OCM_REMOTE_RDMA;
+  else //alloc_type == 1
+    alloc_params->kind = OCM_REMOTE_RMA;
 
   a = ocm_alloc(alloc_params);
   if (!a) {
@@ -411,45 +423,60 @@ int main(int argc, char *argv[])
   double rem_size_MB;
   uint64_t rem_size_B;
 
-  //number of iterations for bandwidth test
+  //Test number to run 1-4
+  int test_num;
+  //allocation type for tests 1 and 4
+  int alloc_type; 
+  //number of iterations for bandwidth test, test 4
   int num_iter=1;
 
-  if (argc < 5) {
-usage:
-    fprintf(stderr, "Usage: %s <which test> <test_suboption> <allocation size 1 in MB (alloc1)>"
-        " <allocation size 2 in MB (alloc2)>\n "
-        "\twhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided; 4=read/write BW\n"
-        "\tSuboptions for test 1: 1=allocate IB buffer (alloc1-local, alloc2-remote); 2=allocate GPU memory\n"
-        "\t3=allocate host memory; 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n"
-        "\tSuboptions for test 4: number of iterations\n", argv[0]);
-    return -1;
-  }
-  //Convert the double values for MB input to bytes
-  local_size_MB = strtod(argv[3], 0);
-  local_size_B = (uint64_t)(local_size_MB*pow(2,20));
-
-  //Convert the double values for MB input to bytes
-  rem_size_MB = strtod(argv[4], 0);
-  rem_size_B = (uint64_t)(rem_size_MB*pow(2,20));
-
-  if(local_size_B > rem_size_B)
+  //Check to see if the test type was specified
+  if (argc < 2)
   {
-    printf("Please use a larger remote buffer size than local size\n");
+    print_usage(argv[0]); 
     return -1;
   }
 
-  switch (atoi(argv[1])){
+  //Check the test number to determine how to proceed
+  test_num = atoi(argv[1]);
+  printf("Test number %d selected\n", test_num);
+
+  //All tests except the bandwidth test specify a size
+  if(test_num != 4)
+  {
+    if((test_num == 1 && argc != 5) || ((test_num == 2 || test_num == 3) && argc != 4)) 
+    {
+        print_usage(argv[0]); 
+        return -1;
+    }
+    //Convert the double values for MB input to bytes
+    local_size_MB = strtod(argv[2], 0);
+    local_size_B = (uint64_t)(local_size_MB*pow(2,20));
+
+    //Convert the double values for MB input to bytes
+    rem_size_MB = strtod(argv[3], 0);
+    rem_size_B = (uint64_t)(rem_size_MB*pow(2,20));
+
+    if(local_size_B > rem_size_B)
+    {
+      printf("Please use a larger remote buffer size than local size\n");
+      return -1;
+    }
+  }
+
+  switch (test_num){
     //allocation
     case 1:
+      alloc_type = atoi(argv[4]);
       printf("Testing IB allocation with local buffer of size %4f MB and remote buffer of size %4f MB\n", local_size_MB, rem_size_MB);
-      if(alloc_test(atoi(argv[2]),local_size_B, rem_size_B)){
+      if(alloc_test(alloc_type,local_size_B, rem_size_B)){
         fprintf(stderr, "FAIL: allocation test\n");
         return -1;
       }
       else
         printf("pass: allocation test\n");
       break;
-      //copy-onesided
+      //copy-onesided tests all allocation types available
     case 2:
       if(copy_onesided_test(local_size_B,rem_size_B)){
         fprintf(stderr, "FAIL: allocation test\n");
@@ -458,7 +485,7 @@ usage:
       else
         printf("pass: copy one-sided test\n");
       break;
-      //copy-twosided
+      //copy-twosided tests all allocation types available
     case 3:
       if(copy_twosided_test(local_size_B, rem_size_B)){
         fprintf(stderr, "FAIL: copy twosided test\n");
@@ -468,11 +495,17 @@ usage:
         printf("pass: copy two-sided test\n");
       break;
     case 4:
-      
-      num_iter=atoi(argv[2]);
-      printf("Calling R/W bandwidth test with %d iterations for each size\n", num_iter);
+      if(argc != 4)
+      {
+        print_usage(argv[0]);
+        return -1;
+      }
 
-      if(read_write_bw_test(num_iter)){
+      alloc_type = atoi(argv[2]);
+      num_iter=atoi(argv[3]);
+      printf("Calling R/W bandwidth test with %d iterations for each size and allocation type %d\n", num_iter, alloc_type);
+
+      if(read_write_bw_test(num_iter, alloc_type)){
         fprintf(stderr, "FAIL: read/write bw test\n");
         return -1;
       }
@@ -480,7 +513,9 @@ usage:
         printf("pass: read/write bw test\n");
       break;
     default:
-      goto usage;
+      print_usage(argv[0]);
   }
   return 0;
+
+        return -1;
 }

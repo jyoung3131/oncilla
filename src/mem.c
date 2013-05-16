@@ -33,6 +33,9 @@
 
 /* Internal state */
 static int myrank = -1;
+#ifdef INFINIBAND
+static int ib_port = 67980;
+#endif
 
 /* TODO need list representing pending alloc requests */
 
@@ -255,6 +258,9 @@ inbound_thread(void *arg)
              * initiate connection to us. Then listen for connections.
              * XXX possible race condition
              */
+            msg.u.alloc.u.rdma.port = ib_port;
+            ib_port += 1;
+
             ret = conn_put(conn, &msg, sizeof(msg));
             if (--ret < 0)
                 break;
@@ -329,6 +335,8 @@ request_thread(void *arg)
     msg->rank = myrank;
     if (msg->type == MSG_ADD_NODE) {
         ret = msg_send_add_node(msg);
+				if(ret)
+					printd("Please check that the master node (typically first host in the nodefile) has been started first\n");
     } else if (msg->type == MSG_REQ_ALLOC) {
         ret = msg_send_req_alloc(msg);
         msg->type = MSG_RELEASE_APP;
@@ -341,7 +349,7 @@ request_thread(void *arg)
         __detailed_print("error sending message %s\n",
                 MSG_TYPE2STR(msg->type));
     free(msg);
-    printd("exiting %s\n", (ret < 0 ? "with error" : "normally"));
+    printd("Exiting %s\n", (ret < 0 ? "with error" : "normally"));
     if (ret) BUG(1);
     pthread_exit(NULL);
 }
@@ -356,7 +364,7 @@ mem_init(const char *nodefile_path)
 
     if (parse_nodefile(nodefile_path, &myrank))
         return -1;
-    printd("i am rank %d\n", myrank);
+    printd("I am rank %d\n", myrank);
     BUG(myrank < 0);
 
     if (pthread_create(&tid, NULL, listen_thread, NULL))
