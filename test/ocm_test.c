@@ -74,6 +74,11 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   TIMER_START(ocm_alloc_timer);
 #endif     
   a = ocm_alloc(alloc_params);
+#ifdef TIMING
+  TIMER_END(ocm_alloc_timer, ocm_alloc_ns);
+  printf("Allocation time is %lu ns\n", ocm_alloc_ns);
+#endif     
+
   //b = ocm_alloc(alloc_params);
   //c = ocm_alloc(alloc_params);
 

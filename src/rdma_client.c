@@ -273,6 +273,12 @@ ib_client_disconnect(struct ib_alloc *ib)
   TIMER_DECLARE1(ib_disconnect_timer);
   TIMER_START(ib_disconnect_timer);
 
+if (rdma_disconnect(ib->rdma.id))
+  {
+    fprintf(stderr, "failed to disconnect RDMA connection\n");
+    rc = 1;
+  }
+
   TIMER_DECLARE1(ib_dis_fine_timer);
   TIMER_START(ib_dis_fine_timer);
   

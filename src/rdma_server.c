@@ -265,12 +265,22 @@ ib_server_disconnect(struct ib_alloc *ib)
   uint64_t ib_total_disconnect_ns = 0;
   uint64_t ib_destroy_qp_ns =0;
   uint64_t ib_mem_dereg_ns = 0; 
+  #endif
+
   TIMER_DECLARE1(ib_disconnect_timer);
   TIMER_START(ib_disconnect_timer);
 
+if (rdma_disconnect(ib->rdma.id))
+  {
+    fprintf(stderr, "failed to disconnect RDMA connection\n");
+    rc = 1;
+  }
+
   TIMER_DECLARE1(ib_dis_fine_timer);
   TIMER_START(ib_dis_fine_timer);
-  #endif
+
+
+
 
    //Destroy the queue pair - returns void
     rdma_destroy_qp(ib->rdma.id);

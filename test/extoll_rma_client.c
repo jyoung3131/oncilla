@@ -269,8 +269,6 @@ static int buffer_size_mismatch_test(void)
   return 0;
 }
 
-// TODO bandwidth test
-
 // TODO Multiple connections test (many clients)
 
 // TODO Multiple regions test (one client many MRs)
