@@ -68,6 +68,9 @@ struct alloc_ation
 
     int orig_rank;
     int remote_rank;
+    //A sequentially increasing ID used to find
+    //and release remote allocations
+    uint64_t rem_alloc_id;
 
     enum alloc_ation_type type;
     size_t bytes;
@@ -83,11 +86,14 @@ struct alloc_ation
           extoll_t ex_temp;
         } rma;
         #endif
+        #ifdef INFINIBAND
         struct {
             /* RDMA CM needs these */
             char ib_ip[HOST_NAME_MAX];
             int port;
+            ib_t ib_rem;
         } rdma;
+        #endif
     } u;
 };
 

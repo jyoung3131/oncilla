@@ -37,6 +37,10 @@ static int myrank = -1;
 static int ib_port = 67980;
 #endif
 
+//A sequentially increasing allocation ID that identifies remote allocations
+//so they can be freed properly
+static uint64_t rem_alloc_id  = 0;
+
 /* TODO need list representing pending alloc requests */
 
 static struct queue *outbox; /* msgs intended for apps  (to pmsg) */
@@ -161,20 +165,43 @@ msg_recv_do_alloc(struct message *msg)
     __msg_do_alloc(msg);
 }
 
-/* TODO */
-#if 0
-
 static void
-__msg_do_free(struct message *msg) { }
+__msg_do_free(struct message *msg) 
+{ 
+    BUG(dealloc_ate(&msg->u.alloc));
+}
 
+//Message is sent from local node to remote node
+//that handles remote allocation
 static int
-msg_send_do_free(struct message *msg) { }
+msg_send_do_free(struct message *msg) 
+{ 
+    int ret = 0;
+    BUG(!msg);
+    BUG(msg->type != MSG_DO_FREE);
+    BUG(msg->u.alloc.remote_rank > node_file_entries - 1);
+    BUG(msg->u.alloc.remote_rank == myrank);
+
+    ret = send_recv_msg(msg, msg->u.alloc.remote_rank);
+    if (ret)
+        goto out;
+    send_pid(msg, msg->pid);
+
+    ret = 0;
+out:
+    return ret;
+}
 
 static void
-msg_recv_do_free(struct message *msg) { }
+msg_recv_do_free(struct message *msg) 
+{ 
+  BUG(!msg);
+  __msg_do_free(msg);
+}
 
-#endif
 
+//Master node, rank 0, looks up other nodes
+//for possible allocations
 static void
 __msg_req_alloc(struct message *msg)
 {
@@ -185,9 +212,21 @@ __msg_req_alloc(struct message *msg)
     msg->status++;
 }
 
+//Master node, rank 0, looks up other nodes
+//for possible allocations
+static void
+__msg_req_free(struct message *msg)
+{
+    printd("Todo - keep track and release allocations!\n");
+    /*struct alloc_ation alloc;
+    msg->u.req.orig_rank = msg->rank;
+    BUG(0 > alloc_find(&msg->u.req, &alloc));
+    msg->u.alloc = alloc;
+    msg->status++;*/
+}
+
 ///Sends a request message to rank 0 to find a node for an allocation,
 ///then sends a subsquent message to rank N to request an allocation
-
 static int
 msg_send_req_alloc(struct message *msg)
 {
@@ -217,12 +256,53 @@ out:
     return ret;
 }
 
+///Sends a notification message to rank 0 to free info on an allocation,
+///then sends a subsquent message to rank N to free an allocation
+static int
+msg_send_req_free(struct message *msg)
+{
+    int ret = 0;
+    BUG(!msg);
+    BUG(msg->type != MSG_REQ_FREE);
+
+    printd("Notifying from rank0\n");
+    if (myrank == 0)
+        __msg_req_free(msg);
+    else
+        ret = send_recv_msg(msg, 0);
+    if (ret)
+        goto out;
+
+    printd("got alloc type %d\n", msg->u.alloc.type);
+    if ((msg->u.alloc.type != ALLOC_MEM_HOST) && (msg->u.alloc.type != ALLOC_MEM_GPU)) {
+        msg->type   = MSG_DO_FREE;
+        msg->status = MSG_REQUEST;
+        /* TODO support multiple allocs across nodes here */
+        ret = send_recv_msg(msg, msg->u.alloc.remote_rank);
+        if (ret)
+            goto out;
+    }
+    ret = 0;
+out:
+    return ret;
+}
+
+//Message received at master node, rank 0
 static void
 msg_recv_req_alloc(struct message *msg)
 {
     BUG(!msg); BUG(myrank != 0);
     printd("got msg from rank%d\n", msg->rank);
     __msg_req_alloc(msg);
+}
+
+//Message received at master node, rank 0
+static void
+msg_recv_req_free(struct message *msg)
+{
+    BUG(!msg); BUG(myrank != 0);
+    printd("got free msg from rank%d\n", msg->rank);
+    __msg_req_free(msg);
 }
 
 /* threads */
@@ -253,6 +333,13 @@ inbound_thread(void *arg)
             if (--ret < 0)
                 break;
         } else if (msg.type == MSG_DO_ALLOC) {
+            
+            //As remote allocations are created, assign them an identifying ID
+            printd("Remote allocation has local ID of %lu\n", rem_alloc_id);
+            msg.u.alloc.rem_alloc_id = rem_alloc_id;
+            //Increment the ID for each allocation
+            rem_alloc_id++;
+
             #ifdef INFINIBAND
             /* First, send msg back to orig rank to unblock app, so it can
              * initiate connection to us. Then listen for connections.
@@ -277,6 +364,12 @@ inbound_thread(void *arg)
             //replaced once the free path is written 
             extoll_notification(msg.u.alloc.u.rma.ex_temp);
             #endif
+        } 
+        else if (msg.type == MSG_DO_FREE) 
+        {
+            printd("InboundThread received free request for allocation \n");
+            //Free the remote allocation
+            msg_recv_do_free(&msg);
         } else {
             printd("unhandled message %s\n", MSG_TYPE2STR(msg.type));
             BUG(1);
@@ -339,8 +432,14 @@ request_thread(void *arg)
 					printd("Please check that the master node (typically first host in the nodefile) has been started first\n");
     } else if (msg->type == MSG_REQ_ALLOC) {
         ret = msg_send_req_alloc(msg);
+        //release the request thread since the request has finished
         msg->type = MSG_RELEASE_APP;
         send_pid(msg, msg->pid);
+    } else if (msg->type == MSG_REQ_FREE) {
+        ret = msg_send_req_free(msg);
+        msg->type = MSG_RELEASE_APP;
+        send_pid(msg, msg->pid);
+
     } else {
         __detailed_print("unhandled message %s\n", MSG_TYPE2STR(msg->type));
         BUG(1);

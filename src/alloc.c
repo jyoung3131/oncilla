@@ -162,6 +162,11 @@ alloc_ate(struct alloc_ation *alloc)
         printd("RDMA: wait for client on port %d\n", p.port);
         if (ib_connect(ib, true))
             ABORT();
+        
+        alloc->type = ALLOC_MEM_RDMA;
+        //Save the IB pointer, so we can use it to close the connection
+        //gracefully in dealloc_ate
+        alloc->u.rdma.ib_rem = ib;
     }
     #endif
 
@@ -182,6 +187,7 @@ alloc_ate(struct alloc_ation *alloc)
 
         printd("EXTOLL parameters for the server are NodeID: %d VPID: %d and NLA %lx\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
         //Save these parameters into the allocation struct so they get passed back in the return message to the client
+        alloc->type = ALLOC_MEM_RMA;
         alloc->u.rma.node_id = ex->params.dest_node;
         alloc->u.rma.vpid = ex->params.dest_vpid;
         alloc->u.rma.dest_nla = ex->params.dest_nla;
@@ -199,5 +205,76 @@ alloc_ate(struct alloc_ation *alloc)
         BUG(1);
     }
 
+    //Add each of the allocations to a linked list so we can close the connection later
+    INIT_LIST_HEAD(&alloc->link);
+    printd("Adding new remote alloc with ID %lu to list\n", alloc->rem_alloc_id);
+    lock_allocs();
+    list_add(&alloc->link, &allocs);
+    unlock_allocs();
+
     return 0;
+}
+
+/* This function deallocates any remote allocations for connections via IB or
+ * EXTOLL. 
+ *
+ * This function is executed by any node which is present in a remote
+ * allocation, returned by rank 0.
+ */
+int
+dealloc_ate(struct alloc_ation *alloc)
+{
+    if (!alloc)
+        return -1;
+    
+    //Pointer used to iterate over list of local allocation structs
+    struct alloc_ation *tmp, *rem_alloc;
+
+    rem_alloc=NULL;
+
+    //Iterate over the list of remote allocations
+    for_each_alloc(tmp, allocs)
+    {
+      if(tmp->rem_alloc_id == alloc->rem_alloc_id)
+      {
+        rem_alloc = tmp;
+        break;
+      }
+    }
+
+    if(rem_alloc == NULL)
+    {
+      printd("No remote allocation found for ID %lu \n", alloc->rem_alloc_id);
+      BUG(1);
+    }
+    
+    printd("Deallocating memory for allocation %lu of type %d\n", rem_alloc->rem_alloc_id, rem_alloc->type);
+
+    #ifdef INFINIBAND
+    if (alloc->type == ALLOC_MEM_RDMA) 
+    {
+        if (ib_disconnect(rem_alloc->u.rdma.ib_rem, true))
+            ABORT();
+    }
+    #endif
+    #ifdef EXTOLL
+    else if (alloc->type == ALLOC_MEM_RMA) 
+    {
+
+        if (extoll_disconnect(rem_alloc->u.rma.ex_temp, true))
+            ABORT();
+    }
+    #endif 
+    #ifdef CUDA
+    else if (alloc->type == ALLOC_MEM_GPU)
+    {
+      printf("Remote CUDA allocations not supported!\n");
+    }
+    #endif
+    else {
+        BUG(1);
+    }
+
+    return 0;
+
 }
