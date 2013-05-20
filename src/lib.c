@@ -412,11 +412,11 @@ ocm_free(ocm_alloc_t a)
     msg.u.alloc.remote_rank = a->u.rma.remote_rank;
     printd("sending req_free to daemon\n");
     if (pmsg_send(PMSG_DAEMON_PID, &msg))
-      goto out;
+      return -1;
 
     printd("waiting for reply from daemon\n");
     if (pmsg_recv(&msg, true))
-      goto out;
+      return -1;
     BUG(msg.type != MSG_RELEASE_APP);
 
     //release the local EXTOLL connection 
