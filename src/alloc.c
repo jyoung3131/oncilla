@@ -268,9 +268,6 @@ dealloc_ate(struct alloc_ation *alloc)
       printf("Remote CUDA allocations not supported!\n");
     }
     #endif
-    else {
-        BUG(1);
-    }
 
     return 0;
 
