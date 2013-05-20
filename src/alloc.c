@@ -69,7 +69,6 @@ alloc_add_node(int rank, struct alloc_node_config *config)
 int
 alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 {
-    struct node_entry *node = NULL;
 
     if (!req || !alloc) return -1;
 
@@ -93,6 +92,8 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 
     #ifdef INFINIBAND
     else if (req->type == ALLOC_MEM_RDMA) {
+        //defined locally to avoid unused variable error
+        struct node_entry *node = NULL;
         printd("req orig rank %d, num nodes %d\n",
                 req->orig_rank, node_file_entries);
         alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
@@ -109,7 +110,7 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
         printd("req orig rank %d, num nodes %d\n",
         req->orig_rank, node_file_entries);
                  alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
-        node = &node_file[alloc->remote_rank];
+        //node = &node_file[alloc->remote_rank];
         printd("alloc: rma on rank %d\n", alloc->remote_rank);
     }
     #endif
@@ -169,9 +170,8 @@ alloc_ate(struct alloc_ation *alloc)
         rem_alloc->type = ALLOC_MEM_RDMA;
     }
     #endif
-
     #ifdef EXTOLL
-    else if (alloc->type == ALLOC_MEM_RMA) {
+    if (alloc->type == ALLOC_MEM_RMA) {
         struct extoll_params p;
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
@@ -193,14 +193,11 @@ alloc_ate(struct alloc_ation *alloc)
     }
     #endif
     #ifdef CUDA
-    else if (alloc->type == ALLOC_MEM_GPU)
+    if (alloc->type == ALLOC_MEM_GPU)
     {
       printf("Remote CUDA allocations not supported!\n");
     }
     #endif
-    else {
-        BUG(1);
-    }
 
     //Add the local allocation ptr to a linked list so we can close the connection later
     INIT_LIST_HEAD(&alloc->link);
@@ -255,7 +252,7 @@ dealloc_ate(struct alloc_ation *alloc)
     }
     #endif
     #ifdef EXTOLL
-    else if (alloc->type == ALLOC_MEM_RMA) 
+    if (alloc->type == ALLOC_MEM_RMA) 
     {
 
         if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true))
@@ -263,14 +260,11 @@ dealloc_ate(struct alloc_ation *alloc)
     }
     #endif 
     #ifdef CUDA
-    else if (alloc->type == ALLOC_MEM_GPU)
+    if (alloc->type == ALLOC_MEM_GPU)
     {
       printf("Remote CUDA allocations not supported!\n");
     }
     #endif
-    else {
-        BUG(1);
-    }
 
     return 0;
 
