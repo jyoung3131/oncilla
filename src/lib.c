@@ -35,13 +35,16 @@
 /* Internal definitions */
 
 struct lib_alloc {
-	struct list_head link;
-	enum ocm_kind kind;
-	/* TODO Later, when allocations are composed of partitioned distributed
-	 * allocations, this will no longer be a single union, but an array of them,
-	 * to accomodate the heterogeneity in allocations.
-	 */
-	union {
+  struct list_head link;
+  enum ocm_kind kind;
+  //A unique allocation ID per node to allow sending ocm_free messages to
+  //remote nodes
+  uint64_t rem_alloc_id;
+  /* TODO Later, when allocations are composed of partitioned distributed
+   * allocations, this will no longer be a single union, but an array of them,
+   * to accomodate the heterogeneity in allocations.
+   */
+  union {
 #ifdef INFINIBAND
 		struct {
 			ib_t ib;
@@ -205,7 +208,8 @@ void ocm_transfer_time(uint64_t* host_transfer_ns, uint64_t* gpu_transfer_ns)
 	*gpu_transfer_ns = transfer_timer->gpu_transfer_ns;
 }
 
-	ocm_alloc_t
+//Allocation function, ocm_alloc
+  ocm_alloc_t
 ocm_alloc(ocm_alloc_param_t alloc_param)
 {
   struct message msg;
@@ -336,6 +340,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     alloc->u.rdma.remote_bytes  = msg.u.alloc.bytes;
     alloc->u.rdma.local_bytes   = p.buf_len;
     alloc->u.rdma.local_ptr     = p.buf;
+    alloc->rem_alloc_id         = msg.u.alloc.rem_alloc_id;
 
     #ifdef TIMING
     uint64_t ib_con_ns=0;
@@ -387,11 +392,12 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
 		if (!alloc->u.rma.ex)
 			goto out;
 
-		INIT_LIST_HEAD(&alloc->link);
-		alloc->kind                 = OCM_REMOTE_RMA;
-		alloc->u.rma.remote_rank   = msg.u.alloc.remote_rank;
-		alloc->u.rma.remote_bytes  = msg.u.alloc.bytes;
-		alloc->u.rma.local_bytes   = p.buf_len;
+    INIT_LIST_HEAD(&alloc->link);
+    alloc->kind                 = OCM_REMOTE_RMA;
+    alloc->u.rma.remote_rank   = msg.u.alloc.remote_rank;
+    alloc->u.rma.remote_bytes  = msg.u.alloc.bytes;
+    alloc->u.rma.local_bytes   = p.buf_len;
+    alloc->rem_alloc_id        = msg.u.alloc.rem_alloc_id;
 
     #ifdef TIMING
     uint64_t extoll_con_ns=0;
@@ -432,20 +438,79 @@ out:
 	int
 ocm_free(ocm_alloc_t a)
 {
-	if (!a) return -1;
-	if (a->kind == OCM_LOCAL_HOST) {
-		free(a->u.local.ptr);
-	}
+  //We must transfer essential data (remote_rank, rem_alloc_id)
+  //to the message's 'alloc_ation' struct, alloc from the local
+  //lib_alloc structure
+  struct message msg;
+
+  msg.type        = MSG_REQ_FREE;
+  msg.status      = MSG_REQUEST;
+  msg.pid         = getpid();
+  msg.u.alloc.rem_alloc_id  = a->rem_alloc_id;
+
+  if (!a) return -1;
+  if (a->kind == OCM_LOCAL_HOST) {
+    free(a->u.local.ptr);
+  }
 #ifdef CUDA
-	else if (a->kind == OCM_LOCAL_GPU) {
-		cudaFree(a->u.gpu.cuda_ptr);
-	}
+  else if (a->kind == OCM_LOCAL_GPU) {
+    cudaFree(a->u.gpu.cuda_ptr);
+  }
 #endif
-	else
-	{
-		BUG(1);
-	}
-	return 0;
+#ifdef INFINIBAND
+  else if (a->kind == OCM_REMOTE_RDMA)
+  {
+
+    msg.u.alloc.type = ALLOC_MEM_RDMA;
+    msg.u.alloc.remote_rank = a->u.rdma.remote_rank;
+    printd("sending req_free to daemon\n");
+    if (pmsg_send(PMSG_DAEMON_PID, &msg))
+      return -1;
+
+    printd("waiting for reply from daemon\n");
+    if (pmsg_recv(&msg, true))
+      return -1;
+
+    BUG(msg.type != MSG_RELEASE_APP);
+
+    //release the local IB connection 
+    if (ib_disconnect(a->u.rdma.ib, false/*is client*/))
+      return -1;
+
+    //Free the EXTOLL structure
+    if(ib_free(a->u.rdma.ib))
+      return -1;
+  }
+#endif
+#ifdef EXTOLL
+  else if (a->kind == OCM_REMOTE_RMA)
+  {
+    msg.u.alloc.type = ALLOC_MEM_RMA;
+    msg.u.alloc.remote_rank = a->u.rma.remote_rank;
+    printd("sending req_free to daemon\n");
+    if (pmsg_send(PMSG_DAEMON_PID, &msg))
+      goto out;
+
+    printd("waiting for reply from daemon\n");
+    if (pmsg_recv(&msg, true))
+      goto out;
+    BUG(msg.type != MSG_RELEASE_APP);
+
+    //release the local EXTOLL connection 
+    if (extoll_disconnect(a->u.rma.ex, false/*is client*/))
+      return -1;
+
+    //Free the EXTOLL structure
+    if(extoll_free(a->u.rma.ex))
+      return -1;
+
+  }
+#endif
+  else
+  {
+    BUG(1);
+  }
+  return 0;
 }
 
 	int

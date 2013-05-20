@@ -69,8 +69,6 @@ alloc_add_node(int rank, struct alloc_node_config *config)
 int
 alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 {
-    struct node_entry *node = NULL;
-
     if (!req || !alloc) return -1;
 
     if (node_file_entries == 1)
@@ -93,6 +91,9 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 
     #ifdef INFINIBAND
     else if (req->type == ALLOC_MEM_RDMA) {
+        //defined locally to avoid unused variable error
+        struct node_entry *node = NULL;
+
         printd("req orig rank %d, num nodes %d\n",
                 req->orig_rank, node_file_entries);
         alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
@@ -109,7 +110,6 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
         printd("req orig rank %d, num nodes %d\n",
         req->orig_rank, node_file_entries);
                  alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
-        node = &node_file[alloc->remote_rank];
         printd("alloc: rma on rank %d\n", alloc->remote_rank);
     }
     #endif
@@ -141,15 +141,18 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 int
 alloc_ate(struct alloc_ation *alloc)
 {
+    //Create a new allocation structure that can be saved on this node
+    //to handle teardown
+    struct alloc_ation *rem_alloc;
+    rem_alloc = calloc(1, sizeof(*rem_alloc));
 
     if (!alloc)
         return -1;
 
-    #ifdef INFINIBAND
-    /* XXX Save this value somewhere. Maybe create unique alloc IDs to associate
-     * with this. */
-    ib_t ib;
+    //Copy the remote allocation ID to the local struct
+    rem_alloc->rem_alloc_id = alloc->rem_alloc_id;
 
+    #ifdef INFINIBAND
     if (alloc->type == ALLOC_MEM_RDMA) {
         struct ib_params p;
         p.addr      = NULL;
@@ -157,35 +160,35 @@ alloc_ate(struct alloc_ation *alloc)
         p.buf_len   = alloc->bytes;
         p.buf       = calloc(1, alloc->bytes);
         ABORT2(!p.buf);
-        if (!(ib = ib_new(&p)))
+        if (!(rem_alloc->u.rdma.ib_rem = ib_new(&p)))
             ABORT();
         printd("RDMA: wait for client on port %d\n", p.port);
-        if (ib_connect(ib, true))
+        if (ib_connect(rem_alloc->u.rdma.ib_rem, true))
             ABORT();
+        
+        rem_alloc->type = ALLOC_MEM_RDMA;
     }
     #endif
 
     #ifdef EXTOLL
-    else if (alloc->type == ALLOC_MEM_RMA) {
-        extoll_t ex;
-        
+    if (alloc->type == ALLOC_MEM_RMA) {
         struct extoll_params p;
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
         //for us
         ABORT2(!p.buf);
-        if (!(ex = extoll_new(&p)))
+        if (!(rem_alloc->u.rma.ex_rem = extoll_new(&p)))
             ABORT();
         printd("EXTOLL: setting up server connection\n");
-        if (extoll_connect(ex, true))
+        if (extoll_connect(rem_alloc->u.rma.ex_rem, true))
             ABORT();
 
-        printd("EXTOLL parameters for the server are NodeID: %d VPID: %d and NLA %lx\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
-        //Save these parameters into the allocation struct so they get passed back in the return message to the client
-        alloc->u.rma.node_id = ex->params.dest_node;
-        alloc->u.rma.vpid = ex->params.dest_vpid;
-        alloc->u.rma.dest_nla = ex->params.dest_nla;
-        alloc->u.rma.ex_temp = ex;
+        printd("EXTOLL parameters for the server are NodeID: %d VPID: %d and NLA %lx\n", rem_alloc->u.rma.ex_rem->params.dest_node, rem_alloc->u.rma.ex_rem->params.dest_vpid, rem_alloc->u.rma.ex_rem->params.dest_nla);
+        //Save these parameters into the parameter allocation struct so they get passed back in the return message to the client
+        alloc->type = ALLOC_MEM_RMA;
+        alloc->u.rma.node_id = rem_alloc->u.rma.ex_rem->params.dest_node;
+        alloc->u.rma.vpid = rem_alloc->u.rma.ex_rem->params.dest_vpid;
+        alloc->u.rma.dest_nla = rem_alloc->u.rma.ex_rem->params.dest_nla;
    
     }
     #endif
@@ -199,5 +202,76 @@ alloc_ate(struct alloc_ation *alloc)
         BUG(1);
     }
 
+    //Add the local allocation ptr to a linked list so we can close the connection later
+    INIT_LIST_HEAD(&alloc->link);
+    printd("Adding new remote alloc with ID %lu to list\n", rem_alloc->rem_alloc_id);
+    lock_allocs();
+    list_add(&rem_alloc->link, &allocs);
+    unlock_allocs();
+
     return 0;
+}
+
+/* This function deallocates any remote allocations for connections via IB or
+ * EXTOLL. 
+ *
+ * This function is executed by any node which is present in a remote
+ * allocation, returned by rank 0.
+ */
+int
+dealloc_ate(struct alloc_ation *alloc)
+{
+    if (!alloc)
+        return -1;
+    
+    //Pointer used to iterate over list of local allocation structs
+    struct alloc_ation *tmp, *rem_alloc;
+
+    rem_alloc=NULL;
+
+    //Iterate over the list of remote allocations
+    for_each_alloc(tmp, allocs)
+    {
+      if(tmp->rem_alloc_id == alloc->rem_alloc_id)
+      {
+        rem_alloc = tmp;
+        break;
+      }
+    }
+
+    if(rem_alloc == NULL)
+    {
+      printd("No remote allocation found for ID %lu \n", alloc->rem_alloc_id);
+      BUG(1);
+    }
+    
+    printd("Deallocating memory for allocation %lu of type %d\n", rem_alloc->rem_alloc_id, rem_alloc->type);
+
+    #ifdef INFINIBAND
+    if (alloc->type == ALLOC_MEM_RDMA) 
+    {
+        if (ib_disconnect(rem_alloc->u.rdma.ib_rem, true))
+            ABORT();
+    }
+    #endif
+    #ifdef EXTOLL
+    if (alloc->type == ALLOC_MEM_RMA) 
+    {
+
+        if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true))
+            ABORT();
+    }
+    #endif 
+    #ifdef CUDA
+    if (alloc->type == ALLOC_MEM_GPU)
+    {
+      printf("Remote CUDA allocations not supported!\n");
+    }
+    #endif
+    else {
+        BUG(1);
+    }
+
+    return 0;
+
 }
