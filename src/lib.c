@@ -184,6 +184,8 @@ enum ocm_kind ocm_alloc_kind(ocm_alloc_t alloc)
   return alloc->kind;
 }
 
+
+//Allocation function, ocm_alloc
   ocm_alloc_t
 ocm_alloc(ocm_alloc_param_t alloc_param)
 {
@@ -359,12 +361,15 @@ out:
   int
 ocm_free(ocm_alloc_t a)
 {
+  //We must transfer essential data (remote_rank, rem_alloc_id)
+  //to the message's 'alloc_ation' struct, alloc from the local
+  //lib_alloc structure
   struct message msg;
 
   msg.type        = MSG_REQ_FREE;
   msg.status      = MSG_REQUEST;
   msg.pid         = getpid();
-
+  msg.u.alloc.rem_alloc_id  = a->rem_alloc_id;
 
   if (!a) return -1;
   if (a->kind == OCM_LOCAL_HOST) {
@@ -379,6 +384,8 @@ ocm_free(ocm_alloc_t a)
   else if (a->kind == OCM_REMOTE_RDMA)
   {
 
+    msg.u.alloc.type = ALLOC_MEM_RDMA;
+    msg.u.alloc.remote_rank = a->u.rdma.remote_rank;
     printd("sending req_free to daemon\n");
     if (pmsg_send(PMSG_DAEMON_PID, &msg))
       return -1;
@@ -401,6 +408,8 @@ ocm_free(ocm_alloc_t a)
 #ifdef EXTOLL
   else if (a->kind == OCM_REMOTE_RMA)
   {
+    msg.u.alloc.type = ALLOC_MEM_RMA;
+    msg.u.alloc.remote_rank = a->u.rma.remote_rank;
     printd("sending req_free to daemon\n");
     if (pmsg_send(PMSG_DAEMON_PID, &msg))
       goto out;
@@ -411,7 +420,7 @@ ocm_free(ocm_alloc_t a)
     BUG(msg.type != MSG_RELEASE_APP);
 
     //release the local EXTOLL connection 
-    if (extoll_disconnect(a>u.rma.ex, false/*is client*/))
+    if (extoll_disconnect(a->u.rma.ex, false/*is client*/))
       return -1;
 
     //Free the EXTOLL structure

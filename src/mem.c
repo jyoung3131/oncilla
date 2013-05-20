@@ -39,7 +39,7 @@ static int ib_port = 67980;
 
 //A sequentially increasing allocation ID that identifies remote allocations
 //so they can be freed properly
-static uint64_t rem_alloc_id  = 0;
+static uint64_t rem_alloc_id  = 1;
 
 /* TODO need list representing pending alloc requests */
 
@@ -265,7 +265,7 @@ msg_send_req_free(struct message *msg)
     BUG(!msg);
     BUG(msg->type != MSG_REQ_FREE);
 
-    printd("Notifying from rank0\n");
+    printd("Notifying rank0 to release resources\n");
     if (myrank == 0)
         __msg_req_free(msg);
     else
@@ -273,15 +273,19 @@ msg_send_req_free(struct message *msg)
     if (ret)
         goto out;
 
-    printd("got alloc type %d\n", msg->u.alloc.type);
-    if ((msg->u.alloc.type != ALLOC_MEM_HOST) && (msg->u.alloc.type != ALLOC_MEM_GPU)) {
-        msg->type   = MSG_DO_FREE;
-        msg->status = MSG_REQUEST;
-        /* TODO support multiple allocs across nodes here */
+    msg->type   = MSG_DO_FREE;
+    msg->status = MSG_REQUEST;
+    
+    printd("Sending free for allocation type %d to remote rank %d\n", msg->u.alloc.type, msg->u.alloc.remote_rank);
+    if ((msg->u.alloc.type == ALLOC_MEM_RDMA) || (msg->u.alloc.type == ALLOC_MEM_RMA))
+    {
         ret = send_recv_msg(msg, msg->u.alloc.remote_rank);
         if (ret)
             goto out;
     }
+    else
+      BUG(1);
+
     ret = 0;
 out:
     return ret;
@@ -362,7 +366,7 @@ inbound_thread(void *arg)
             ret = conn_put(conn, &msg, sizeof(msg));
             //TODO - this code helps to close the server properly, but it should be
             //replaced once the free path is written 
-            extoll_notification(msg.u.alloc.u.rma.ex_temp);
+            extoll_notification(msg.u.alloc.u.rma.ex_rem);
             #endif
         } 
         else if (msg.type == MSG_DO_FREE) 
@@ -370,6 +374,7 @@ inbound_thread(void *arg)
             printd("InboundThread received free request for allocation \n");
             //Free the remote allocation
             msg_recv_do_free(&msg);
+            ret = conn_put(conn, &msg, sizeof(msg));
         } else {
             printd("unhandled message %s\n", MSG_TYPE2STR(msg.type));
             BUG(1);

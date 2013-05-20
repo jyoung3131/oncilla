@@ -17,24 +17,26 @@
 
 void print_usage(const char* prog_name)
 {
-    fprintf(stderr, "Usage: %s <which test> <allocation size 1 in MB (alloc1)> <allocation size 2 in MB (alloc2)> "
-        "<suboption1_allocation_type> <suboption2_test4_num_iter>\n"
-        "\tWhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided; 4=read/write BW\n"
-        "\t\tSuboptions for test 1: 1=allocate host memory; 2=allocate GPU memory; \n"
-        "\t\t\t\t3=allocate IB buffer (alloc1-local, alloc2-remote); 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n"
-        "\t\tSuboptions for test 4: type of allocation (IB=0, EXTOLL=1); number iterations\n\n"
-        "\tEx: Test 1 with IB memory: %s 1 10.0 10.0 3\n"
-        "\tEx: Test 2 with 10 MB memory: %s 2 10.0 10.0\n"
-        "\tEx: Test 3 with 10 MB memory: %s 3 10.0 10.0\n"
-        "\tEx: Test 4 BW test for EXTOLL, 5 iterations: %s 4 1 5\n", prog_name, prog_name, prog_name, prog_name, prog_name);
+  fprintf(stderr, "Usage: %s <which test> <allocation size 1 in MB (alloc1)> <allocation size 2 in MB (alloc2)> "
+      "<suboption1_allocation_type> <suboption2_test4_num_iter>\n"
+      "\tWhich test: 1=allocation; 2=copy-onesided; 3=copy-twosided; 4=read/write BW\n"
+      "\t\tSuboptions for test 1: 1=allocate host memory; 2=allocate GPU memory; \n"
+      "\t\t\t\t3=allocate IB buffer (alloc1-local, alloc2-remote); 4=allocate EXTOLL buffer (alloc1-local, alloc2-remote)\n"
+      "\t\tSuboptions for test 4: type of allocation (IB=0, EXTOLL=1); number iterations\n\n"
+      "\tEx: Test 1 with IB memory: %s 1 10.0 10.0 3\n"
+      "\tEx: Test 2 with 10 MB memory: %s 2 10.0 10.0\n"
+      "\tEx: Test 3 with 10 MB memory: %s 3 10.0 10.0\n"
+      "\tEx: Test 4 BW test for EXTOLL, 5 iterations: %s 4 1 5\n", prog_name, prog_name, prog_name, prog_name, prog_name);
 }
 
 static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B){
-  ocm_alloc_t a;
-  //ocm_alloc_t b, c;
+
+  int num_allocs = 3;
+  ocm_alloc_t a[num_allocs];
   void *buf;
   size_t buf_len, remote_len;
   ocm_alloc_param_t alloc_params;
+  int i;
 
 
   if (0 > ocm_init()) {
@@ -67,41 +69,53 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     default:
       print_usage("ocm_test");
   }
-  
-  a = ocm_alloc(alloc_params);
-  //b = ocm_alloc(alloc_params);
-  //c = ocm_alloc(alloc_params);
 
-  if (!a) {
-    printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
-    return -1;
-  }
-
-  printf("Checking to see if ocm_localbuf works.\n");
-  //Check to see if we can access a local buffer endpoint
-  if (ocm_localbuf(a, &buf, &buf_len)) 
+  for(i = 0; i < num_allocs; i++)
   {
-    printf("ocm_localbuf failed\n");
-    goto fail;
-  }
-  printf("local buffer size %lu @ %p\n", buf_len, buf);
+    a[i] = ocm_alloc(alloc_params);
 
-  if (ocm_is_remote(a)) {
-    if (!ocm_remote_sz(a, &remote_len)) {
-      printf("alloc is remote; size = %lu\n", remote_len);
-    } else {
-      printf("alloc is local\n");
+    if (!a[i]) {
+      printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
+      return -1;
+    }
+
+    printf("Checking to see if ocm_localbuf works.\n");
+    //Check to see if we can access a local buffer endpoint
+    if (ocm_localbuf(a[i], &buf, &buf_len)) 
+    {
+      printf("ocm_localbuf failed\n");
+      goto fail;
+    }
+    printf("local buffer size %lu @ %p\n", buf_len, buf);
+
+    if (ocm_is_remote(a[i])) {
+      if (!ocm_remote_sz(a[i], &remote_len)) {
+        printf("alloc is remote; size = %lu\n", remote_len);
+      } else {
+        printf("alloc is local\n");
+      }
     }
   }
 
+  for(i = 0; i < num_allocs; i++)
+  {
+    if(ocm_free(a[i]))
+    {
+      printf("ocm_free failed\n");
+      goto fail;
+    }
+  }
   free(alloc_params);
 
   //**** For EXTOLL we must actively kill the client process
   //to avoid leaving any pinned pages around
   if(suboption == 4)
   {
-    if(ocm_extoll_disconnect(a))
-      goto fail;
+    for(i = 0; i < num_allocs; i++)
+    {
+      if(ocm_extoll_disconnect(a[i]))
+        goto fail;
+    }
   }
 
   if (0 > ocm_tini()) {
@@ -155,7 +169,7 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 
   //Use a one-sided copy since we are copying from a local-remote IB or EXTOLL
   //paired object
-  
+
   printf("Reading for size %lu\n", local_size_B);
   if(ocm_copy_onesided(a, copy_params)){
     printf("ocm_copy_onesided (read) failed\n");
@@ -169,10 +183,10 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
     printf("ocm_copy_onesided (write) failed\n");
     goto fail;
   } 
-  
-  #ifdef EXTOLL
+
+#ifdef EXTOLL
   if(ocm_extoll_disconnect(a))
-      goto fail;
+    goto fail;
 #endif
 
   free(alloc_params);
@@ -441,8 +455,8 @@ int main(int argc, char *argv[])
   {
     if((test_num == 1 && argc != 5) || ((test_num == 2 || test_num == 3) && argc != 4)) 
     {
-        print_usage(argv[0]); 
-        return -1;
+      print_usage(argv[0]); 
+      return -1;
     }
     //Convert the double values for MB input to bytes
     local_size_MB = strtod(argv[2], 0);
@@ -512,5 +526,5 @@ int main(int argc, char *argv[])
   }
   return 0;
 
-        return -1;
+  return -1;
 }
