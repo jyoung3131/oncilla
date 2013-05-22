@@ -82,8 +82,8 @@ libflags = []
 #At some point we need to check on this...
 #ccflags.extend(['-fno-strict-aliasing'])
 
-if int(ARGUMENTS.get('timing', 0)): # add timing macro to allow for use of in-place timers
-   ccflags.extend(['-DTIMING'])
+#Always compile with the timing flag for this branch
+ccflags.extend(['-DTIMING'])
 
 if int(ARGUMENTS.get('debug', 0)): # set debug flags (no MPI debugging here)
    ccflags.extend(['-ggdb','-O0'])

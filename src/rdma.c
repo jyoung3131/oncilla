@@ -57,7 +57,11 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
     struct ibv_send_wr      *bad_wr;
 
     /* "from" address and key */
-    BUG(src_offset > len);
+    if((src_offset+len) > ib->params.buf_len)
+    {
+      printf("Source offset %lu and send size %lu is larger than buffer length %lu\n",src_offset, len, ib->params.buf_len);
+      BUG(1);
+    }
 
     sge.addr   = (uintptr_t)(ib->params.buf+src_offset);
     sge.length = len;
@@ -83,7 +87,7 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
     }
     TIMER_END(ib_timer, ib_send_ns);
     TIMER_CLEAR(ib_timer);
-    printf("Time to post %lu bytes: %lu \n", len, ib_send_ns);
+    //printf("Time to post %lu bytes: %lu \n", len, ib_send_ns);
 
 
     return 0;
@@ -309,7 +313,8 @@ ib_poll(ib_t ib)
     } while (ne);
     TIMER_END(ib_timer, ib_send_ns);
     TIMER_CLEAR(ib_timer);
-            printf("Time to poll bytes: %lu \n", ib_send_ns);
+    
+    //printf("Time to poll bytes: %lu \n", ib_send_ns);
 
     return 0;
 }
