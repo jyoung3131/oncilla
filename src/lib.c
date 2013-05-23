@@ -658,7 +658,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
       cudaEventSynchronize(transfer_timer->stop);
       cudaEventElapsedTime(&elapsed_ms, transfer_timer->start, transfer_timer->stop);
       tmp_ns = (unsigned long)(elapsed_ms*1000000.0);
-      printf("Time for copy is %4f ms and %lu ns\n", elapsed_ms, tmp_ns);
+      printd("Time for copy is %4f ms and %lu ns\n", elapsed_ms, tmp_ns);
 
 
       if(cudaErr)
