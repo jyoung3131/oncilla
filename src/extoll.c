@@ -99,9 +99,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
         else
           len -= max_num_B_per_call;
 
-        //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
-        rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_ALL_NOTIFICATIONS,RMA2_CMD_DEFAULT);
-        //rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
+        rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
 
       }//end for
     }//end if put

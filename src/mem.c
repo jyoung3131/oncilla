@@ -364,9 +364,8 @@ inbound_thread(void *arg)
              */
             msg_recv_do_alloc(&msg); /* should not block for EXTOLL setup */
             ret = conn_put(conn, &msg, sizeof(msg));
-            //TODO - this code helps to close the server properly, but it should be
-            //replaced once the free path is written 
-            extoll_notification(msg.u.alloc.u.rma.ex_rem);
+            
+						//extoll_notification(msg.u.alloc.u.rma.ex_rem);
             #endif
         } 
         else if (msg.type == MSG_DO_FREE) 
@@ -401,7 +400,10 @@ listen_thread(void *arg) /* persistent */
     snprintf(port, HOST_NAME_MAX, "%d", node_file[myrank].ocm_port);
     printd("listening on port %s\n", port);
     if (conn_localbind(&conn, port))
-        goto out;
+		{
+			printf("Could not connect to local port %s for OCM - check that no other instance is running\n",port);
+			goto out;
+		}
 
     while (true) {
         if ((ret = conn_accept(&conn, &newconn)))

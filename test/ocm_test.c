@@ -157,8 +157,8 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 
 	//Create a structure that is used to configure the allocation on each endpoint
 	alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
-	alloc_params->local_alloc_bytes = local_size_B;
-	alloc_params->rem_alloc_bytes = rem_size_B;
+	alloc_params->local_alloc_bytes = local_size_B*2;
+	alloc_params->rem_alloc_bytes = rem_size_B*2;
 #ifdef INFINIBAND
 	alloc_params->kind = OCM_REMOTE_RDMA;
 #endif
@@ -196,10 +196,10 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 	} 
 
 #ifdef EXTOLL
-	if(ocm_extoll_disconnect(a))
-		goto fail;
+	//if(ocm_extoll_disconnect(a))
+	//	goto fail;
 #endif
-
+	ocm_free(a);
 	free(alloc_params);
 	free(copy_params);
 
@@ -212,7 +212,7 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 	return 0;
 
 fail:
-
+	ocm_free(a);
 	free(alloc_params);
 	free(copy_params);
 	if (0 > ocm_tini())

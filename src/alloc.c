@@ -176,7 +176,7 @@ alloc_ate(struct alloc_ation *alloc)
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
         //for us
-        ABORT2(!p.buf);
+        //ABORT2(!p.buf);
         if (!(rem_alloc->u.rma.ex_rem = extoll_new(&p)))
             ABORT();
         printd("EXTOLL: setting up server connection\n");
@@ -257,8 +257,7 @@ dealloc_ate(struct alloc_ation *alloc)
     #ifdef EXTOLL
     if (alloc->type == ALLOC_MEM_RMA) 
     {
-
-        if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true))
+      if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true))
             ABORT();
     }
     #endif 

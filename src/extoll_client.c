@@ -40,15 +40,23 @@ int extoll_client_connect(struct extoll_alloc *ex)
     uint64_t register_ns = 0;
     uint64_t total_setup_ns = 0;
   #endif
+  int mem_result;
 
    TIMER_DECLARE1(setup_timer);
 
   printf("Setting up remote memory connection to node %d, vpid %d, and 0x%lx NLA with RMA2\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
 
   TIMER_START(setup_timer);
-    ex->rma_conn.buf = (void*)malloc(ex->params.buf_len);
+    mem_result=posix_memalign((void**)&(ex->rma_conn.buf),4096,ex->params.buf_len);
   TIMER_END(setup_timer, malloc_ns);
   TIMER_CLEAR(setup_timer);
+  
+  if (mem_result!=0)
+  {
+    perror("Memory Buffer allocation failed. Bailing out.");
+    return -1;
+  }
+
   memset(ex->rma_conn.buf, 0, ex->params.buf_len);
   printd("Region starts at %p\n", ex->rma_conn.buf);
   
@@ -75,6 +83,12 @@ int extoll_client_connect(struct extoll_alloc *ex)
     print_err(rc);
     return -1;
   }
+	printf("Testing buffer\n");
+
+	//uint32_t* buf = (uint32_t*)ex->rma_conn.buf;
+	//buf[0] = 2;
+	//buf[3] = 4;
+	//printf("The value of buf is %d \n", buf[3]);
 
   printd("Registering with remote memory\n");
   //register pins the memory and associates it with an RMA2_Region
