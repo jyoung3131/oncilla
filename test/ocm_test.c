@@ -149,6 +149,8 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 	ocm_alloc_t a;
 	ocm_alloc_param_t alloc_params;
 	ocm_param_t copy_params;
+	uint64_t alloc_size_B = pow(2,31)+1;
+	//uint64_t max_rw_size_B = pow(2,30);
 
 	if (0 > ocm_init()) {
 		printf("Cannot connect to OCM\n");
@@ -157,10 +159,10 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 
 	//Create a structure that is used to configure the allocation on each endpoint
 	alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
-	alloc_params->local_alloc_bytes = local_size_B*2;
-	alloc_params->rem_alloc_bytes = rem_size_B*2;
+	alloc_params->local_alloc_bytes = alloc_size_B;
+	alloc_params->rem_alloc_bytes = alloc_size_B;
 #ifdef INFINIBAND
-	alloc_params->kind = OCM_REMOTE_RDMA;
+//	alloc_params->kind = OCM_REMOTE_RDMA;
 #endif
 #ifdef EXTOLL
 	alloc_params->kind = OCM_REMOTE_RMA;
@@ -176,17 +178,17 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 	copy_params->src_offset = 0;
 	copy_params->dest_offset = 0;
 	copy_params->bytes = local_size_B;
-	copy_params->op_flag = 0;
 
 	//Use a one-sided copy since we are copying from a local-remote IB or EXTOLL
 	//paired object
-
+/*
+	copy_params->op_flag = 0;
 	printf("Reading for size %lu\n", local_size_B);
 	if(ocm_copy_onesided(a, copy_params)){
 		printf("ocm_copy_onesided (read) failed\n");
 		goto fail;
 	} 
-
+*/
 	copy_params->op_flag = 1;
 
 	printf("Writing for size %lu\n", local_size_B);
