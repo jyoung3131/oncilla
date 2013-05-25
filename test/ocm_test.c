@@ -149,6 +149,7 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 	ocm_alloc_t a;
 	ocm_alloc_param_t alloc_params;
 	ocm_param_t copy_params;
+	uint64_t alloc_size_B = pow(2,31)+1;
 
 	if (0 > ocm_init()) {
 		printf("Cannot connect to OCM\n");
@@ -157,8 +158,8 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 
 	//Create a structure that is used to configure the allocation on each endpoint
 	alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
-	alloc_params->local_alloc_bytes = local_size_B*2;
-	alloc_params->rem_alloc_bytes = rem_size_B*2;
+	alloc_params->local_alloc_bytes = alloc_size_B;
+	alloc_params->rem_alloc_bytes = alloc_size_B;
 #ifdef INFINIBAND
 	alloc_params->kind = OCM_REMOTE_RDMA;
 #endif
@@ -336,6 +337,12 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
 static int read_write_bw_test(int num_iter, int alloc_type){
 	ocm_alloc_t a;
 
+#ifdef TIMING
+		uint64_t ocm_bw_ns[num_iter];
+		double ocm_tot_bw_ns = 0;
+		TIMER_DECLARE1(ocm_bw_timer);
+#endif     
+
 	ocm_alloc_param_t alloc_params;
 	ocm_param_t copy_params;
 	uint64_t local_size_B = 64;
@@ -343,6 +350,9 @@ static int read_write_bw_test(int num_iter, int alloc_type){
 	uint64_t max_rw_size_B = pow(2,30);
 	int i;
 	int counter=0;
+
+  double conv_Gbps = 1000000000.0 / (double)(pow(2, 27));
+
 	if (0 > ocm_init()) {
 		printf("Cannot connect to OCM\n");
 		return -1;
@@ -377,17 +387,25 @@ static int read_write_bw_test(int num_iter, int alloc_type){
 		//paired object
 		printf("Reading for size %lu\n", local_size_B);
 		copy_params->bytes= local_size_B;
+    ocm_tot_bw_ns = 0;  
 
 		for (i=0; i<num_iter; i++){
 			counter++;
 			//printf("reading\n");
+		  TIMER_START(ocm_bw_timer);
 			if(ocm_copy_onesided(a, copy_params)){
 				printf("ocm_copy_onesided (read) failed at size %lu\n",local_size_B);
 				goto fail;
 			}
+		  TIMER_END(ocm_bw_timer, ocm_bw_ns[i]);
+    	TIMER_CLEAR(ocm_bw_timer);
+      ocm_tot_bw_ns += ocm_bw_ns[i];  
 		}
+    ocm_tot_bw_ns = ocm_tot_bw_ns / num_iter;
+    printf("Read for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
 		local_size_B*=2;
 	}
+
 
 	//---------------------------
 	//Do the write bandwidth test
@@ -400,20 +418,28 @@ static int read_write_bw_test(int num_iter, int alloc_type){
 	{
 		copy_params->bytes= local_size_B;
 		printf("Writing for size %lu\n", local_size_B);
+    ocm_tot_bw_ns = 0;  
 
 		for (i=0; i<num_iter; i++){
 			counter++;
 			//printf("writing\n");
+		  TIMER_START(ocm_bw_timer);
 			if(ocm_copy_onesided(a, copy_params))
 			{
 				printf("ocm_copy_onesided (write) failed at size %lu count: %d\n", local_size_B, c);
 				goto fail;
 			}
+		  TIMER_END(ocm_bw_timer, ocm_bw_ns[i]);
+    	TIMER_CLEAR(ocm_bw_timer);
+      ocm_tot_bw_ns += ocm_bw_ns[i];  
 		}
+    ocm_tot_bw_ns = ocm_tot_bw_ns / num_iter;
+    printf("Read for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
 		local_size_B*=2;
 		c++;
 	}
 
+  ocm_free(a);
 	//Free allocation and configuration parameters
 	free(alloc_params);
 	free(copy_params);
