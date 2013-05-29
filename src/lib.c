@@ -22,7 +22,6 @@
 #ifdef CUDA
 #include <cuda.h>
 #include <cuda_runtime.h> 
-
 #endif
 
 #ifdef EXTOLL
@@ -133,8 +132,11 @@ ocm_init(void)
 
   printd("Internal timing enabled!\n");
   transfer_timer = (ocm_timer_t)calloc(1, sizeof(struct ocm_timer));
+
+#ifdef CUDA
   cudaEventCreate(&transfer_timer->start);
   cudaEventCreate(&transfer_timer->stop);
+#endif
 
 #ifdef INFINIBAND
   if (ib_init()) {

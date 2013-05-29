@@ -18,8 +18,8 @@ Help("""
       Type: 'scons ' to build the optimized version,
             'scons -c' to clean the build directory,
             'scons debug=1' to build the debug version,
-            'scons timing=1' to enable timers for the optimized build,
             'scons extoll=1' or 'scons ib=1' to build EXTOLL or IB code exclusively.
+            Timing is enabled by default on the timing branch.
       """)
 
 gcc = 'clang'
