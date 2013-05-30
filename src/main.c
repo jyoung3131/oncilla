@@ -214,7 +214,6 @@ int main(int argc, char *argv[])
 
     if (notify_rank0())
         return -1;
-
     
     printf("Press Ctrl-C to close the daemon\n"); 
    
