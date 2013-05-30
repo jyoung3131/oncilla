@@ -124,17 +124,6 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   }
   free(alloc_params);
 
-  //**** For EXTOLL we must actively kill the client process
-  //to avoid leaving any pinned pages around
-  if(suboption == 4)
-  {
-    for(i = 0; i < num_allocs; i++)
-    {
-      if(ocm_extoll_disconnect(a[i]))
-        goto fail;
-    }
-  }
-
   if (0 > ocm_tini()) {
     printf("ocm_tini failed\n");
     return -1;
