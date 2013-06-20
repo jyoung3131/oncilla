@@ -153,6 +153,7 @@ alloc_ate(struct alloc_ation *alloc)
     struct alloc_ation *rem_alloc;
     printf("Size of local alloc %lu, remote alloc %lu\n",sizeof(*alloc), sizeof(*rem_alloc));
     rem_alloc = calloc(1, sizeof(*rem_alloc));
+    ocm_timer_t tm = (ocm_timer_t)calloc(1, sizeof(struct oncilla_timer));
 
     if (!alloc)
         return -1;
@@ -171,7 +172,7 @@ alloc_ate(struct alloc_ation *alloc)
         if (!(rem_alloc->u.rdma.ib_rem = ib_new(&p)))
             ABORT();
         printd("RDMA: wait for client on port %d\n", p.port);
-        if (ib_connect(rem_alloc->u.rdma.ib_rem, true))
+        if (ib_connect(rem_alloc->u.rdma.ib_rem, true, tm))
             ABORT();
         
         rem_alloc->type = ALLOC_MEM_RDMA;
@@ -217,6 +218,8 @@ alloc_ate(struct alloc_ation *alloc)
     list_add(&rem_alloc->link, &allocs);
     unlock_allocs();
 
+    free(tm);
+
     return 0;
 }
 
@@ -234,6 +237,7 @@ dealloc_ate(struct alloc_ation *alloc)
     
     //Pointer used to iterate over list of local allocation structs
     struct alloc_ation *tmp, *rem_alloc;
+    ocm_timer_t tm = (ocm_timer_t)calloc(1, sizeof(struct oncilla_timer));
 
     rem_alloc=NULL;
 
@@ -258,7 +262,7 @@ dealloc_ate(struct alloc_ation *alloc)
     #ifdef INFINIBAND
     if (alloc->type == ALLOC_MEM_RDMA) 
     {
-        if (ib_disconnect(rem_alloc->u.rdma.ib_rem, true))
+        if (ib_disconnect(rem_alloc->u.rdma.ib_rem, true, tm))
             ABORT();
     }
     #endif
@@ -275,6 +279,8 @@ dealloc_ate(struct alloc_ation *alloc)
       printf("Remote CUDA allocations not supported!\n");
     }
     #endif
+
+    free(tm);
 
     return 0;
 

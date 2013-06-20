@@ -77,23 +77,6 @@ struct lib_alloc {
   } u;
 };
 
-struct ocm_timer {
-#ifdef CUDA
-  cudaEvent_t start, stop;
-#endif
-  //time to transfer data to the host
-  uint64_t host_transfer_ns;
-  //time to transfer data from the host to the GPU
-  uint64_t gpu_transfer_ns;
-};
-
-typedef struct ocm_timer * ocm_timer_t;
-
-static ocm_timer_t transfer_timer;
-
-
-
-
 /* Internal state */
 
 static LIST_HEAD(allocs); /* list of lib_alloc */
@@ -129,14 +112,6 @@ ocm_init(void)
   if (tries <= 0)
     goto out;
   attached = true;
-
-  printd("Internal timing enabled!\n");
-  transfer_timer = (ocm_timer_t)calloc(1, sizeof(struct ocm_timer));
-
-#ifdef CUDA
-  cudaEventCreate(&transfer_timer->start);
-  cudaEventCreate(&transfer_timer->stop);
-#endif
 
 #ifdef INFINIBAND
   if (ib_init()) {
@@ -182,37 +157,15 @@ ocm_tini(void)
     goto out;
   ret = 0;
 
-  free(transfer_timer);
 out:
   printd("detach from daemon: %s\n", (ret ? "fail" : "success"));
   return ret;
-}
-
-int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
-{
-#ifdef EXTOLL
-  if (extoll_disconnect(extoll_alloc->u.rma.ex, false/*is client*/))
-    return -1;
-
-  //Free the EXTOLL structure
-  if(extoll_free(extoll_alloc->u.rma.ex))
-    return -1;
-#endif
-
-  return 0;
 }
 
 //Public access function to return the type of an allocation
 enum ocm_kind ocm_alloc_kind(ocm_alloc_t alloc)
 {
   return alloc->kind;
-}
-
-//Return the saved timer value
-void ocm_transfer_time(uint64_t* host_transfer_ns, uint64_t* gpu_transfer_ns)
-{
-  *host_transfer_ns = transfer_timer->host_transfer_ns;
-  *gpu_transfer_ns = transfer_timer->gpu_transfer_ns;
 }
 
 //Allocation function, ocm_alloc
@@ -354,7 +307,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     TIMER_DECLARE1(ib_con_timer);
     TIMER_START(ib_con_timer);
 #endif
-    if (ib_connect(alloc->u.rdma.ib, false))
+    if (ib_connect(alloc->u.rdma.ib, false, alloc_param->tm))
       goto out;
 #ifdef TIMING
     TIMER_END(ib_con_timer, ib_con_ns);
@@ -443,7 +396,7 @@ out:
 }
 
   int
-ocm_free(ocm_alloc_t a)
+ocm_free(ocm_alloc_t a, ocm_timer_t tm)
 {
   //We must transfer essential data (remote_rank, rem_alloc_id)
   //to the message's 'alloc_ation' struct, alloc from the local
@@ -481,7 +434,7 @@ ocm_free(ocm_alloc_t a)
     BUG(msg.type != MSG_RELEASE_APP);
 
     //release the local IB connection 
-    if (ib_disconnect(a->u.rdma.ib, false/*is client*/))
+    if (ib_disconnect(a->u.rdma.ib, false/*is client*/, tm))
       return -1;
 
     //Free the EXTOLL structure
@@ -605,7 +558,6 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 
 #ifdef CUDA
   TIMER_DECLARE1(host_timer);
-  //TIMER_DECLARE1(gpu_timer);
   uint64_t tmp_ns = 0;
   cudaError_t cudaErr;
   float elapsed_ms = 0;
@@ -631,7 +583,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
       //Do a memcpy to the local buffer and then write to the remote
       //IB buffer
       memcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
-      if(ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes)||ib_poll(dest->u.rdma.ib))
+      if(ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes, cp_param->tm)||ib_poll(dest->u.rdma.ib, cp_param->tm))
         return -1;
     }
 #endif
@@ -642,7 +594,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
       //EXTOLL buffer
       memcpy(dest->u.rma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
 
-      if(extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes))
+      if(extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes, cp_param->tm))
       {
         printf("extoll_write failed in ocm_copy\n");
         return -1;
@@ -652,13 +604,13 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 #ifdef CUDA
     else if(dest->kind == OCM_LOCAL_GPU)
     {
-      cudaEventRecord(transfer_timer->start, 0);
+      cudaEventRecord(cp_param->tm->cuStart, 0);
 
       cudaErr = cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyHostToDevice);
 
-      cudaEventRecord(transfer_timer->stop, 0);
-      cudaEventSynchronize(transfer_timer->stop);
-      cudaEventElapsedTime(&elapsed_ms, transfer_timer->start, transfer_timer->stop);
+      cudaEventRecord(cp_param->tm->cuStop, 0);
+      cudaEventSynchronize(cp_param->tm->cuStop);
+      cudaEventElapsedTime(&elapsed_ms, cp_param->tm->cuStart, cp_param->tm->cuStop);
       tmp_ns = (unsigned long)(elapsed_ms*1000000.0);
       printd("Time for copy is %4f ms and %lu ns\n", elapsed_ms, tmp_ns);
 
@@ -668,9 +620,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
         printf("cudaMemcpy failed with error %d \n", cudaErr);
         return -1;
       }
-      //TIMER_END(gpu_timer, tmp_ns);
-      //TIMER_CLEAR(gpu_timer);
-      transfer_timer->gpu_transfer_ns += tmp_ns;
+      cp_param->tm->gpu_transfer_ns += tmp_ns;
     }
 #endif
     else
@@ -685,7 +635,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     if(dest->kind == OCM_LOCAL_HOST)
     {
       //Remember to call both ib_read and ib_poll in order to correctly measure the time taken for the transfer
-      if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib))
+      if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm)||ib_poll(src->u.rdma.ib, cp_param->tm))
         return -1;
       memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rdma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
@@ -695,21 +645,20 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     {
       TIMER_START(host_timer);
       //Remember to call both ib_read and ib_poll in order to correctly measure the time taken for the transfer
-      if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib))
+      if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm)||ib_poll(src->u.rdma.ib, cp_param->tm))
         return -1;
       TIMER_END(host_timer, tmp_ns);
       TIMER_CLEAR(host_timer);
-      transfer_timer->host_transfer_ns += tmp_ns;
-      printd("Total host time %lu ns and this time %lu ns\n",  transfer_timer->host_transfer_ns, tmp_ns);
+      cp_param->tm->host_transfer_ns += tmp_ns;
+      printd("Total host time %lu ns and this time %lu ns\n",  cp_param->tm->host_transfer_ns, tmp_ns);
 
-      //TIMER_START(gpu_timer);
-      cudaEventRecord(transfer_timer->start, 0);
+      cudaEventRecord(cp_param->tm->cuStart, 0);
 
       cudaErr = cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rdma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
 
-      cudaEventRecord(transfer_timer->stop, 0);
-      cudaEventSynchronize(transfer_timer->stop);
-      cudaEventElapsedTime(&elapsed_ms, transfer_timer->start, transfer_timer->stop);
+      cudaEventRecord(cp_param->tm->cuStop, 0);
+      cudaEventSynchronize(cp_param->tm->cuStop);
+      cudaEventElapsedTime(&elapsed_ms, cp_param->tm->cuStart, cp_param->tm->cuStop);
       tmp_ns = (unsigned long)(elapsed_ms*1000000.0);
       printd("Time for copy is %4f ms and %lu ns\n", elapsed_ms, tmp_ns);
 
@@ -720,7 +669,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
       }
       //TIMER_END(gpu_timer, tmp_ns);
       //TIMER_CLEAR(gpu_timer);
-      transfer_timer->gpu_transfer_ns += tmp_ns;
+      cp_param->tm->gpu_transfer_ns += tmp_ns;
     }
 #endif
     else
@@ -735,7 +684,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     //Do a read from the remote IB buffer and then memcpy to the local buffer
     if(dest->kind == OCM_LOCAL_HOST)
     {
-      if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+      if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm))
       {
         printf("extoll_read failed in ocm_copy\n");
         return -1;
@@ -748,22 +697,22 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     else if(dest->kind == OCM_LOCAL_GPU)
     {
       TIMER_START(host_timer);
-      if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+      if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm))
       {
         printf("extoll_read failed in ocm_copy\n");
         return -1;
       }
       TIMER_END(host_timer, tmp_ns);
       TIMER_CLEAR(host_timer);
-      transfer_timer->host_transfer_ns += tmp_ns;
+      cp_param->tm->host_transfer_ns += tmp_ns;
 
-      cudaEventRecord(transfer_timer->start, 0);
+      cudaEventRecord(cp_param->tm->cuStart, 0);
 
       cudaErr = cudaMemcpy(dest->u.gpu.cuda_ptr+cp_param->dest_offset_2,src->u.rma.local_ptr+cp_param->src_offset_2, cp_param->bytes, cudaMemcpyHostToDevice);
 
-      cudaEventRecord(transfer_timer->stop, 0);
-      cudaEventSynchronize(transfer_timer->stop);
-      cudaEventElapsedTime(&elapsed_ms, transfer_timer->start, transfer_timer->stop);
+      cudaEventRecord(cp_param->tm->cuStop, 0);
+      cudaEventSynchronize(cp_param->tm->cuStop);
+      cudaEventElapsedTime(&elapsed_ms, cp_param->tm->cuStart, cp_param->tm->cuStop);
       tmp_ns = (unsigned long)(elapsed_ms*1000000.0);
       printd("Time for copy is %4f ms and %lu ns\n", elapsed_ms, tmp_ns);
 
@@ -772,7 +721,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
         printf("cudaMemcpy failed with error %d \n", cudaErr);
         return -1;
       }
-      transfer_timer->gpu_transfer_ns += tmp_ns;
+      cp_param->tm->gpu_transfer_ns += tmp_ns;
     }
 #endif
     else
@@ -793,7 +742,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     else if(dest->kind == OCM_REMOTE_RDMA)
     {
       cudaMemcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.gpu.cuda_ptr+cp_param->src_offset, cp_param->bytes, cudaMemcpyDeviceToHost);
-      if(ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes)||ib_poll(dest->u.rdma.ib))
+      if(ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes, cp_param->tm)||ib_poll(dest->u.rdma.ib, cp_param->tm))
         return -1;
     }
 #endif
@@ -801,7 +750,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
     else if(dest->kind == OCM_REMOTE_RMA)
     {
       cudaMemcpy(dest->u.rma.local_ptr+cp_param->src_offset_2, src->u.gpu.cuda_ptr+cp_param->dest_offset_2, cp_param->bytes, cudaMemcpyDeviceToHost);
-      extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes);
+      extoll_write(dest->u.rma.ex, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes, cp_param->tm);
     }
 #endif
   }
@@ -831,7 +780,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
   if (cp_param->op_flag)
   {
 
-    if(ib_write(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib)) 
+    if(ib_write(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm)||ib_poll(src->u.rdma.ib, cp_param->tm)) 
     {
       printf("write failed\n");
       return -1;
@@ -839,7 +788,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
   }
   else
   {
-    if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes)||ib_poll(src->u.rdma.ib)) 
+    if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm)||ib_poll(src->u.rdma.ib, cp_param->tm)) 
     {
       printf("read failed\n");
       return -1;
@@ -853,7 +802,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
   if (cp_param->op_flag)
   {
 
-    if(extoll_write(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+    if(extoll_write(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm))
     {
       printf("write failed\n");
       return -1;
@@ -861,7 +810,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
   }
   else
   {
-    if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes))
+    if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm))
     {
       printf("read failed\n");
       return -1;

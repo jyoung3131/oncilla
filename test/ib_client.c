@@ -12,7 +12,7 @@
 
 static char *serverIP = NULL;
 
-static ib_t setup(struct ib_params *p)
+static ib_t setup(struct ib_params *p, ocm_timer_t tm)
 {
     ib_t ib;
 
@@ -23,28 +23,21 @@ static ib_t setup(struct ib_params *p)
         return (ib_t)NULL;
 
     //Don't time here due to blocking statements
-    if (ib_connect(ib, false/*is client*/))
+    if (ib_connect(ib, false/*is client*/, tm))
         return (ib_t)NULL;
 
     return ib;
 }
 
 //Return 0 on success and 1 on failure
-static int teardown(ib_t ib)
+static int teardown(ib_t ib, ocm_timer_t tm)
 {
     int ret = 0;
 
-    TIMER_DECLARE1(ib_disconnect_timer);
-    TIMER_START(ib_disconnect_timer);
-
-    if (ib_disconnect(ib, false/*is client*/))
+    if (ib_disconnect(ib, false/*is client*/, tm))
       ret = 1;
 
-    #ifdef TIMING
-    uint64_t ib_teardown_ns = 0;
-    TIMER_END(ib_disconnect_timer, ib_teardown_ns);
-    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", ib_teardown_ns);
-    #endif
+    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", tm->alloc.rdma.ib_total_disconnect_ns);
    
     //Free the IB structure
     if(ib_free(ib))
@@ -59,6 +52,8 @@ static int alloc_test(long long unsigned int size_B)
     ib_t ib;
     struct ib_params params;
     unsigned int *buf = NULL;
+    ocm_timer_t tm;
+    init_ocm_timer(tm);
     //size_t count = size; // (1 << 10);
     unsigned long long num_bufs_to_alloc = size_B / sizeof(*buf);
     printf("Size of buf is %lu B so we allocate %llu buffers for a total of %llu B\n", sizeof(*buf), num_bufs_to_alloc, size_B);
@@ -72,11 +67,13 @@ static int alloc_test(long long unsigned int size_B)
     params.buf      = buf;
     params.buf_len  = num_bufs_to_alloc;
 
-    if (!(ib = setup(&params)))
+    if (!(ib = setup(&params, tm)))
         return -1;
 
-    if(teardown(ib) != 0)
+    if(teardown(ib, tm) != 0)
           return -1;
+
+    destroy_ocm_timer(tm);
     
     /*Return 0 on succes*/
     return 0;
@@ -92,6 +89,8 @@ static int read_write_bw_test()
     uint64_t ib_write_time_ns = 0;
     uint64_t ib_read_time_ns = 0;
     #endif
+    ocm_timer_t tm;
+    init_ocm_timer(tm);
     
 
     ib_t ib;
@@ -115,7 +114,7 @@ static int read_write_bw_test()
     params.buf      = buf;
     params.buf_len  = len;
     printf("Setting up\n");
-    if (!(ib = setup(&params))){
+    if (!(ib = setup(&params, tm))){
         printf("Setup failed\n");
 	    return -1;
     }
@@ -130,7 +129,7 @@ static int read_write_bw_test()
 	#ifdef TIMING
 	TIMER_START(ib_write_timer);
 	#endif
-	if(ib_write(ib, 0, 0, len)||ib_poll(ib))
+	if(ib_write(ib, 0, 0, len, tm)||ib_poll(ib, tm))
 	{
 	    printf("write failed\n");
 	    return -1;
@@ -151,7 +150,7 @@ static int read_write_bw_test()
 	len=size_B2;
 	#ifdef TIMING
 	TIMER_START(ib_read_timer);
-	if(ib_read(ib, 0, 0, len)||ib_poll(ib))
+	if(ib_read(ib, 0, 0, len, tm)||ib_poll(ib, tm))
 	{
 	    printf("read failed\n");
 	    return -1;
@@ -163,15 +162,16 @@ static int read_write_bw_test()
 	
 	size_B2*=2;
 	}
+
 	//Perform teardown
-	if(teardown(ib) != 0){
+	if(teardown(ib, tm) != 0){
 	  printf("tear down error\n");
 	  return -1;
 	}
-	//double the buffer size
-    
 
-    return 0; /* test passed */
+  destroy_ocm_timer(tm);
+
+  return 0; /* test passed */
 }
 
 /* Does a simple write/read to/from remote memory. */
@@ -183,6 +183,9 @@ static int one_sided_test(long long unsigned int size_B)
     size_t count = size_B; // (1 << 10);
     size_t len = count;// * sizeof(*buf);
     size_t i;
+    
+    ocm_timer_t tm;
+    init_ocm_timer(tm);
 
     if (!(buf = calloc(count, sizeof(*buf))))
         return -1;
@@ -192,20 +195,20 @@ static int one_sided_test(long long unsigned int size_B)
     params.buf      = buf;
     params.buf_len  = len;
 
-    if (!(ib = setup(&params)))
+    if (!(ib = setup(&params, tm)))
         return -1;
 
     for (i = 0; i < count; i++)
         buf[i] = 0xdeadbeef;
 
     /* send and wait for completion */
-    if (ib_write(ib, 0, 0, len) || ib_poll(ib))
+    if (ib_write(ib, 0, 0, len, tm) || ib_poll(ib, tm))
         return -1;
 
     memset(buf, 0, len);
 
     /* read back and wait for completion */
-    if (ib_read(ib, 0, 0, len) || ib_poll(ib))
+    if (ib_read(ib, 0, 0, len, tm) || ib_poll(ib, tm))
         return -1;
 
     for (i = 0; i < count; i++)
@@ -213,10 +216,10 @@ static int one_sided_test(long long unsigned int size_B)
             return -1;
 
     //Perform teardown
-    if(teardown(ib) != 0)
+    if(teardown(ib, tm) != 0)
       return -1;
 
-
+    destroy_ocm_timer(tm);
 
     return 0; /* test passed */
 }
@@ -235,6 +238,9 @@ static int buffer_size_mismatch_test(void)
     size_t len = sizeof(*buf);
     unsigned int times;
     bool is_equal;
+    
+    ocm_timer_t tm;
+    init_ocm_timer(tm);
 
     if (!(buf = calloc(1, len)))
         return -1;
@@ -244,7 +250,7 @@ static int buffer_size_mismatch_test(void)
     params.buf      = buf;
     params.buf_len  = len;
 
-    if (!(ib = setup(&params)))
+    if (!(ib = setup(&params, tm)))
         return -1;
 
     /* send 'hello' to second index (third string) */
@@ -252,25 +258,27 @@ static int buffer_size_mismatch_test(void)
     /* write back, releasing server */
 
     strncpy(buf->str, "hello", strlen("hello") + 1);
-    if (ib_write(ib, (2 * len), 0,  len) || ib_poll(ib))
+    if (ib_write(ib, (2 * len), 0,  len, tm) || ib_poll(ib, tm))
         return -1;
 
     times = 1000;
     char resp[] = "nice to meet you";
     do {
         usleep(500);
-        if (ib_read(ib, (7 * len), 0,  len) || ib_poll(ib))
+        if (ib_read(ib, (7 * len), 0,  len, tm) || ib_poll(ib, tm))
             return -1;
         is_equal = (strncmp(buf->str, resp, strlen(resp)) != 0);
     } while (--times > 0 && !is_equal);
 
     buf->str[0] = '\0';
-    if (ib_write(ib, 0, 0, len) || ib_poll(ib))
+    if (ib_write(ib, 0, 0, len, tm) || ib_poll(ib, tm))
         return -1;
 
     //Perform teardown
-    if(teardown(ib) != 0)
+    if(teardown(ib, tm) != 0)
       return -1;
+    
+    destroy_ocm_timer(tm);
 
     return 0;
 }

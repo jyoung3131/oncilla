@@ -15,8 +15,8 @@
 /* Other project includes */
 
 /* Project includes */
-//#include <util/list.h>
 #include <util/list.h>
+#include <ocm_timer.h>
 
 /* Directory includes */
 
@@ -46,6 +46,7 @@ struct ocm_params
     uint64_t bytes;
     //read = 0, write = 1
     int op_flag;
+    ocm_timer_t tm;
 };
 
 typedef struct ocm_params * ocm_param_t;
@@ -56,6 +57,7 @@ struct ocm_alloc_params
     uint64_t local_alloc_bytes;
     uint64_t rem_alloc_bytes;
     enum ocm_kind kind;
+    ocm_timer_t tm;
 };
 
 typedef struct ocm_alloc_params * ocm_alloc_param_t;
@@ -70,11 +72,7 @@ typedef struct ocm_alloc_params * ocm_alloc_param_t;
 int ocm_init(void);
 int ocm_tini(void);
 ocm_alloc_t ocm_alloc(ocm_alloc_param_t alloc_param);
-int ocm_free(ocm_alloc_t a);
-int ocm_extoll_disconnect(ocm_alloc_t a);
-
-//Read from a global timing struct in the lib.c file 
-void ocm_transfer_time(uint64_t* host_transfer_ns, uint64_t* gpu_transfer_ns);
+int ocm_free(ocm_alloc_t a, ocm_timer_t tm);
 
 /* get pointer to local buffer */
 int ocm_localbuf(ocm_alloc_t a, void **buf, size_t *len);

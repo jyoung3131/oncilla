@@ -39,6 +39,13 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   ocm_alloc_param_t alloc_params;
   int i;
 
+  ocm_timer_t tm;
+  init_ocm_timer(tm);
+  alloc_params->tm = tm;
+
+  //Timer that tracks allocations for multiple iterations
+  ocm_timer_t tot_timer;
+  init_ocm_timer(tot_timer);
 
   if (0 > ocm_init()) {
     printf("Cannot connect to OCM\n");
@@ -79,6 +86,7 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
 
   for(i = 0; i < num_allocs; i++)
   {
+
 #ifdef TIMING
     uint64_t ocm_alloc_ns = 0;
     TIMER_DECLARE1(ocm_alloc_timer);
@@ -88,7 +96,12 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
 #ifdef TIMING
     TIMER_END(ocm_alloc_timer, ocm_alloc_ns);
     TIMER_CLEAR(ocm_alloc_timer);
-    printf("Allocation time is %lu ns\n", ocm_alloc_ns);
+    if(alloc_params->kind == OCM_REMOTE_RDMA)
+    {
+      printf("Allocation time is %lu ns\n", tm->alloc.rdma.ib_total_conn_ns);
+      printf("OCM total time is %lu ns\n", ocm_alloc_ns);
+    }
+    
 #endif     
 
     if (!a[i]) {
@@ -112,16 +125,21 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
         printf("alloc is local\n");
       }
     }
-  }
 
-  for(i = 0; i < num_allocs; i++)
-  {
-    if(ocm_free(a[i]))
+    if(ocm_free(a[i], tm))
     {
       printf("ocm_free failed\n");
       goto fail;
     }
+    
+    //Add the timing values to a running counter timer
+    tot_timer->num_allocs++;
+    accum_ocm_timer(tot_timer, tm);
   }
+ 
+  print_ocm_timer(tot_timer);
+
+  destroy_ocm_timer(tm);
   free(alloc_params);
 
   if (0 > ocm_tini()) {
@@ -144,6 +162,10 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   ocm_alloc_t a;
   ocm_alloc_param_t alloc_params;
   ocm_param_t copy_params;
+  
+  ocm_timer_t tm;
+  init_ocm_timer(tm);
+  alloc_params->tm = tm;
 
   //Using a very large buffer will avoid any crashing behavior.
   //uint64_t alloc_size_B = pow(2,31)+1;
@@ -194,11 +216,8 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
     goto fail;
   } 
 
-#ifdef EXTOLL
-  //if(ocm_extoll_disconnect(a))
-  //	goto fail;
-#endif
-  ocm_free(a);
+  ocm_free(a, tm);
+  free(tm);
   free(alloc_params);
   free(copy_params);
 
@@ -211,7 +230,8 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   return 0;
 
 fail:
-  ocm_free(a);
+  ocm_free(a, tm);
+  free(tm);
   free(alloc_params);
   free(copy_params);
   if (0 > ocm_tini())
@@ -228,6 +248,10 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   //  size_t buf_len, remote_len;
   ocm_alloc_param_t alloc_params;
   ocm_param_t copy_params;
+  
+  ocm_timer_t tm;
+  init_ocm_timer(tm);
+  copy_params->tm = tm;
 
   if (0 > ocm_init()) {
     printf("Cannot connect to OCM\n");
@@ -350,6 +374,9 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   uint64_t max_rw_size_B = pow(2,30);
   int i;
   int counter=0;
+  ocm_timer_t tm;
+  init_ocm_timer(tm);
+  copy_params->tm = tm;
 
   double conv_Gbps = 1000000000.0 / (double)(pow(2, 27));
 
@@ -439,8 +466,9 @@ static int read_write_bw_test(int num_iter, int alloc_type){
     c++;
   }
 
-  ocm_free(a);
+  ocm_free(a, tm);
   //Free allocation and configuration parameters
+  free(tm);
   free(alloc_params);
   free(copy_params);
 
@@ -454,6 +482,8 @@ static int read_write_bw_test(int num_iter, int alloc_type){
 
 fail:
 
+  ocm_free(a, tm);
+  free(tm);
   free(alloc_params);
   free(copy_params);
   if (0 > ocm_tini())

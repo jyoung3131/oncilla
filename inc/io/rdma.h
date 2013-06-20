@@ -14,6 +14,7 @@
 /* Other project includes */
 
 /* Project includes */
+#include <ocm_timer.h>
 
 /* Defines */
 
@@ -36,11 +37,11 @@ struct ib_params {
 int ib_init(void);
 ib_t ib_new(struct ib_params *p);
 int ib_free(ib_t ib);
-int ib_connect(ib_t ib, bool is_server);
-int ib_disconnect(ib_t ib, bool is_server);
-int ib_read(ib_t ib, size_t src_offset, size_t dest_offset, size_t len);
-int ib_write(ib_t ib, size_t src_offset, size_t dest_offset, size_t len);
-int ib_poll(ib_t ib);
+int ib_connect(ib_t ib, bool is_server, ocm_timer_t tm);
+int ib_disconnect(ib_t ib, bool is_server, ocm_timer_t tm);
+int ib_read(ib_t ib, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm);
+int ib_write(ib_t ib, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm);
+int ib_poll(ib_t ib, ocm_timer_t tm);
 
 int ib_nic_ip(int idx /* ibN */, char *ip_str, size_t len);
 

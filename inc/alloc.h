@@ -1,6 +1,7 @@
 /**
  * file: alloc.h
- * author: Alexander Merritt, merritt.alex@gatech.edu
+ * authors: Alexander Merritt, merritt.alex@gatech.edu
+ *          Jeff Young, jyoung9@gatech.edu
  * desc: interface for memory allocation governer
  */
 
@@ -15,6 +16,8 @@
 
 /* Project includes */
 #include <util/list.h>
+#include <ocm_timer.h>
+
 #ifdef INFINIBAND
   #include <io/rdma.h>
 #endif
@@ -74,6 +77,9 @@ struct alloc_ation
 
     enum alloc_ation_type type;
     size_t bytes;
+
+    //Timer used to track timing for allocation/deallocation
+    ocm_timer_t tm;
 
     union {
         #ifdef EXTOLL

@@ -1,7 +1,7 @@
 /* file: rdma.h
- * author: Alexander Merritt, merritt.alex@gatech.edu
+ * authors: Alexander Merritt, merritt.alex@gatech.edu
+ *          Jeff Young, jyoung9@gatech.edu
  * desc: internal data structures for the RDMA interface
- *
  * Original code modified from Adit Ranadive's commlib sources.
  */
 
@@ -20,6 +20,9 @@
 #include <sys/types.h>
 
 #include <util/list.h>
+
+/* Directory includes */
+#include <ocm_timer.h>
 
 enum {
     RESPONSE_TIME_MS = 5000
@@ -77,11 +80,11 @@ struct ib_alloc
 };
 
 /* server functions */
-int ib_server_connect(struct ib_alloc *ib);
-int ib_server_disconnect(struct ib_alloc *ib);
+int ib_server_connect(struct ib_alloc *ib, ocm_timer_t tm);
+int ib_server_disconnect(struct ib_alloc *ib, ocm_timer_t tm);
 
 /* client functions */
-int ib_client_connect(struct ib_alloc *ib);
-int ib_client_disconnect(struct ib_alloc *ib);
+int ib_client_connect(struct ib_alloc *ib, ocm_timer_t tm);
+int ib_client_disconnect(struct ib_alloc *ib, ocm_timer_t tm);
 
 #endif

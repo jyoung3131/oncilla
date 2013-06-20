@@ -45,12 +45,9 @@ static LIST_HEAD(ib_allocs);
 
 /* only used by client code */
 static int
-post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset, size_t len)
+post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
     TIMER_DECLARE1(ib_timer);
-    #ifdef TIMING
-    uint64_t ib_send_ns = 0;
-    #endif
 
     struct ibv_sge          sge;
     struct ibv_send_wr      wr;
@@ -85,10 +82,7 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
         perror("ibv_post_send");
         return -1;
     }
-    TIMER_END(ib_timer, ib_send_ns);
-    TIMER_CLEAR(ib_timer);
-    //printf("Time to post %lu bytes: %lu \n", len, ib_send_ns);
-
+    TIMER_END(ib_timer, tm->data.rdma.ib_post_ns);
 
     return 0;
 }
@@ -186,7 +180,7 @@ ib_free(ib_t ib)
 
 /* TODO provide an accept and connect separately, instead of the bool */
 int
-ib_connect(ib_t ib, bool is_server)
+ib_connect(ib_t ib, bool is_server, ocm_timer_t tm)
 {
     int err;
 
@@ -194,15 +188,15 @@ ib_connect(ib_t ib, bool is_server)
         return -1;
 
     if (is_server)
-        err = ib_server_connect((struct ib_alloc*)ib);
+        err = ib_server_connect((struct ib_alloc*)ib, tm);
     else
-        err = ib_client_connect((struct ib_alloc*)ib);
+        err = ib_client_connect((struct ib_alloc*)ib, tm);
 
     return err;
 }
 
 int
-ib_disconnect(ib_t ib, bool is_server)
+ib_disconnect(ib_t ib, bool is_server, ocm_timer_t tm)
 {
     int err;
 
@@ -210,9 +204,9 @@ ib_disconnect(ib_t ib, bool is_server)
         return -1;
 
     if (is_server)
-        err = ib_server_disconnect((struct ib_alloc*)ib);
+        err = ib_server_disconnect((struct ib_alloc*)ib, tm);
     else
-        err = ib_client_disconnect((struct ib_alloc*)ib);
+        err = ib_client_disconnect((struct ib_alloc*)ib, tm);
 
     return err;
 }
@@ -247,7 +241,7 @@ ib_reg_mr(ib_t ib, void *buf, size_t len)
 
 /* client function: pull data fom server */
 int
-ib_read(ib_t ib, size_t src_offset, size_t dest_offset, size_t len)
+ib_read(ib_t ib, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
     if (!ib)
         return -1;
@@ -255,12 +249,12 @@ ib_read(ib_t ib, size_t src_offset, size_t dest_offset, size_t len)
         printd("error: would read past end of remote buffer\n");
         return -1;
     }
-    return post_send(ib, IBV_WR_RDMA_READ, src_offset, dest_offset, len);
+    return post_send(ib, IBV_WR_RDMA_READ, src_offset, dest_offset, len, tm);
 }
 
 /* client function: push data to server */
 int
-ib_write(ib_t ib, size_t src_offset, size_t dest_offset, size_t len)
+ib_write(ib_t ib, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
     if (!ib || len == 0)
         return -1;
@@ -268,21 +262,18 @@ ib_write(ib_t ib, size_t src_offset, size_t dest_offset, size_t len)
         printd("error: would write past end of remote buffer\n");
         return -1;
     }
-    return post_send(ib, IBV_WR_RDMA_WRITE, src_offset, dest_offset, len);
+    return post_send(ib, IBV_WR_RDMA_WRITE, src_offset, dest_offset, len, tm);
 }
 
 /* Wait for some event. Code found in manpage of ibv_get_cq_event */
 int
-ib_poll(ib_t ib)
+ib_poll(ib_t ib, ocm_timer_t tm)
 {
     struct ibv_wc   wc;
     struct ibv_cq   *evt_cq;
     void            *cq_ctxt;
     int             ne;
     TIMER_DECLARE1(ib_timer);
-    #ifdef TIMING
-    uint64_t ib_send_ns = 0;
-    #endif
 
     TIMER_START(ib_timer);
 
@@ -311,13 +302,8 @@ ib_poll(ib_t ib)
             return -1;
 
     } while (ne);
-    TIMER_END(ib_timer, ib_send_ns);
+    TIMER_END(ib_timer, tm->data.rdma.ib_poll_ns);
     TIMER_CLEAR(ib_timer);
-    
-    //printf("Time to poll bytes: %lu \n", ib_send_ns);
 
     return 0;
 }
-
-/* TODO server functions */
-/* right now the server is stupid, just helps make memory then goes away */

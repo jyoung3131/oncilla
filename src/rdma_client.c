@@ -1,7 +1,8 @@
 /* file: rdma_client.c
- * author: Alexander Merritt, merritt.alex@gatech.edu
- * desc: File taken from Adit Ranadive's commlib RDMA code and refactored for
- * OCM
+ * authors: Alexander Merritt, merritt.alex@gatech.edu
+ *          Jeff Young, jyoung9@gatech.edu
+ * desc: File taken from Adit Ranadive's commlib RDMA code 
+ * and refactored for OCM
  */
 
 /* System includes */
@@ -37,7 +38,7 @@
 /* Public functions */
 
 int
-ib_client_connect(struct ib_alloc *ib)
+ib_client_connect(struct ib_alloc *ib, ocm_timer_t tm)
 {
     #ifdef TIMING
     uint64_t ib_mem_reg_ns = 0;
@@ -242,7 +243,7 @@ ib_client_connect(struct ib_alloc *ib)
 }
 
   int
-ib_client_disconnect(struct ib_alloc *ib)
+ib_client_disconnect(struct ib_alloc *ib, ocm_timer_t tm)
 {
   ////////////////////
   //IB Verbs events
