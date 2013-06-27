@@ -40,12 +40,11 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   int i;
 
   ocm_timer_t tm;
-  init_ocm_timer(tm);
-  alloc_params->tm = tm;
+  init_ocm_timer(&tm);
 
   //Timer that tracks allocations for multiple iterations
   ocm_timer_t tot_timer;
-  init_ocm_timer(tot_timer);
+  init_ocm_timer(&tot_timer);
 
   if (0 > ocm_init()) {
     printf("Cannot connect to OCM\n");
@@ -54,6 +53,9 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
 
   //Create a structure that is used to configure the allocation on each endpoint
   alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
+  //The allocation pointer points to the same structure as tm defined above
+  alloc_params->tm = tm;
+
   alloc_params->local_alloc_bytes = local_size_B;
   switch (suboption){
     case 1:
@@ -134,7 +136,7 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
     
     //Add the timing values to a running counter timer
     tot_timer->num_allocs++;
-    accum_ocm_timer(tot_timer, tm);
+    accum_ocm_timer(&tot_timer, tm);
   }
  
   print_ocm_timer(tot_timer);
@@ -164,8 +166,7 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   ocm_param_t copy_params;
   
   ocm_timer_t tm;
-  init_ocm_timer(tm);
-  alloc_params->tm = tm;
+  init_ocm_timer(&tm);
 
   //Using a very large buffer will avoid any crashing behavior.
   //uint64_t alloc_size_B = pow(2,31)+1;
@@ -178,6 +179,7 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 
   //Create a structure that is used to configure the allocation on each endpoint
   alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
+  alloc_params->tm = tm;
   alloc_params->local_alloc_bytes = alloc_size_B;
   alloc_params->rem_alloc_bytes = alloc_size_B;
 #ifdef INFINIBAND
@@ -250,8 +252,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   ocm_param_t copy_params;
   
   ocm_timer_t tm;
-  init_ocm_timer(tm);
-  copy_params->tm = tm;
+  init_ocm_timer(&tm);
 
   if (0 > ocm_init()) {
     printf("Cannot connect to OCM\n");
@@ -307,6 +308,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
   printf("All allocations completed\n");  
 
   copy_params = (ocm_param_t)calloc(1,sizeof(struct ocm_params));
+  copy_params->tm = tm;
   copy_params->src_offset = 0;
   copy_params->dest_offset = 0;
   copy_params->bytes = local_size_B;
@@ -375,8 +377,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   int i;
   int counter=0;
   ocm_timer_t tm;
-  init_ocm_timer(tm);
-  copy_params->tm = tm;
+  init_ocm_timer(&tm);
 
   double conv_Gbps = 1000000000.0 / (double)(pow(2, 27));
 
@@ -401,6 +402,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   }
 
   copy_params = (ocm_param_t)calloc(1,sizeof(struct ocm_params));
+  copy_params->tm = tm;
   copy_params->src_offset = 0;
   copy_params->dest_offset = 0;
   //set the operation to a read, initially

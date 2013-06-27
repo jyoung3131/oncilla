@@ -52,7 +52,7 @@ static int alloc_test(long long unsigned int size_B)
   char *buf = NULL;
   unsigned long long len = size_B / sizeof(*buf);
   ocm_timer_t tm;
-  init_ocm_timer(tm);
+  init_ocm_timer(&tm);
 
   printf("Size of buf is %lu B so we allocate %llu buffers for a total of %llu B\n", sizeof(*buf), len, size_B);
 
@@ -87,7 +87,7 @@ static int read_write_bw_test(void){
   size_t count = pow(2,32)+1;
   size_t len = count * sizeof(*buf);
   ocm_timer_t tm;
-  init_ocm_timer(tm);
+  init_ocm_timer(&tm);
 
   if (!(buf = calloc(count, sizeof(*buf))))
     return -1;
@@ -125,7 +125,7 @@ static int one_sided_test(void)
   size_t count = 1000000000;
   size_t len = count * sizeof(*buf);
   ocm_timer_t tm;
-  init_ocm_timer(tm);
+  init_ocm_timer(&tm);
 
   if (!(buf = calloc(count, sizeof(*buf))))
     return -1;
@@ -172,7 +172,7 @@ static int buffer_size_mismatch_test(void)
   unsigned int times;
   bool is_equal;
   ocm_timer_t tm;
-  init_ocm_timer(tm);
+  init_ocm_timer(&tm);
 
   if (!(buf = calloc(count, sizeof(*buf))))
     return -1;

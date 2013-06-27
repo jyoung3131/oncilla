@@ -79,44 +79,44 @@ typedef struct oncilla_timer * ocm_timer_t;
 
 
 //Helper function to reset the timer entries
-static void reset_ocm_timer(ocm_timer_t tm)
+static void reset_ocm_timer(ocm_timer_t* tm)
 {
-  memset(tm, 0, sizeof(struct oncilla_timer));
+  memset(*tm, 0, sizeof(struct oncilla_timer));
 }
 
-static void init_ocm_timer(ocm_timer_t tm)
+static void init_ocm_timer(ocm_timer_t* tm)
 {
-  tm = (ocm_timer_t)calloc(1, sizeof(struct oncilla_timer));
+  *tm = (ocm_timer_t)calloc(1, sizeof(struct oncilla_timer));
   //Initialize the timer to 0
   reset_ocm_timer(tm);
   //Initialize cudaEvent timers
   #ifdef CUDA
-    cudaEventCreate(&tm->cuStart);
-    cudaEventCreate(&tm->cuStop);
+    cudaEventCreate(&((*tm)->cuStart));
+    cudaEventCreate(&((*tm)->cuStop));
   #endif
 }
 
 //Helper function to add values from one source time to a destination
 //timer
-static void accum_ocm_timer(ocm_timer_t dest, ocm_timer_t src)
+static void accum_ocm_timer(ocm_timer_t* dest, const ocm_timer_t src)
 {
   #ifdef INFINIBAND
-    dest->alloc.rdma.ib_mem_reg_ns += src->alloc.rdma.ib_mem_reg_ns;
-    dest->alloc.rdma.ib_create_qp_ns += src->alloc.rdma.ib_create_qp_ns;
-    dest->alloc.rdma.ib_total_conn_ns += src->alloc.rdma.ib_total_conn_ns;
-    dest->alloc.rdma.ib_mem_dereg_ns += src->alloc.rdma.ib_mem_dereg_ns;
-    dest->alloc.rdma.ib_destroy_qp_ns += src->alloc.rdma.ib_destroy_qp_ns;
-    dest->alloc.rdma.ib_total_disconnect_ns += src->alloc.rdma.ib_total_disconnect_ns;
+    (*dest)->alloc.rdma.ib_mem_reg_ns += src->alloc.rdma.ib_mem_reg_ns;
+    (*dest)->alloc.rdma.ib_create_qp_ns += src->alloc.rdma.ib_create_qp_ns;
+    (*dest)->alloc.rdma.ib_total_conn_ns += src->alloc.rdma.ib_total_conn_ns;
+    (*dest)->alloc.rdma.ib_mem_dereg_ns += src->alloc.rdma.ib_mem_dereg_ns;
+    (*dest)->alloc.rdma.ib_destroy_qp_ns += src->alloc.rdma.ib_destroy_qp_ns;
+    (*dest)->alloc.rdma.ib_total_disconnect_ns += src->alloc.rdma.ib_total_disconnect_ns;
     
-    dest->data.rdma.ib_post_ns += src->data.rdma.ib_post_ns;
-    dest->data.rdma.ib_poll_ns += src->data.rdma.ib_poll_ns;
+    (*dest)->data.rdma.ib_post_ns += src->data.rdma.ib_post_ns;
+    (*dest)->data.rdma.ib_poll_ns += src->data.rdma.ib_poll_ns;
   #endif
   #ifdef EXTOLL
 
   #endif
 
-  dest->host_transfer_ns += src->host_transfer_ns;
-  dest->gpu_transfer_ns += src->gpu_transfer_ns;
+  (*dest)->host_transfer_ns += src->host_transfer_ns;
+  (*dest)->gpu_transfer_ns += src->gpu_transfer_ns;
 }
 
 static void print_ocm_timer(ocm_timer_t tm)
