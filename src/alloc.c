@@ -76,7 +76,8 @@ alloc_add_node(int rank, struct alloc_node_config *config)
 int
 alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
 {
-    if (!req || !alloc) return -1;
+    
+if (!req || !alloc) return -1;
 
     if (node_file_entries == 1)
         req->type = ALLOC_MEM_HOST;
@@ -151,7 +152,7 @@ alloc_ate(struct alloc_ation *alloc)
     //Create a new allocation structure that can be saved on this node
     //to handle teardown
     struct alloc_ation *rem_alloc;
-    printf("Size of local alloc %lu, remote alloc %lu\n",sizeof(*alloc), sizeof(*rem_alloc));
+    printd("Size of local alloc %lu, remote alloc %lu\n",sizeof(*alloc), sizeof(*rem_alloc));
     rem_alloc = calloc(1, sizeof(*rem_alloc));
     ocm_timer_t tm = (ocm_timer_t)calloc(1, sizeof(struct oncilla_timer));
 
@@ -185,7 +186,6 @@ alloc_ate(struct alloc_ation *alloc)
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
         //for us
-        //ABORT2(!p.buf);
         if (!(rem_alloc->u.rma.ex_rem = extoll_new(&p)))
             ABORT();
         printd("EXTOLL: setting up server connection\n");

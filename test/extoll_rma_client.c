@@ -63,8 +63,7 @@ static int alloc_test(long long unsigned int size_B)
   printf("Allocating %llu bytes \n", size_B);
 
   //The extoll_client_connect function currently allocates memory 
-  //if (!(buf = calloc(num_bufs_to_alloc, sizeof(*buf))))
-  //    return -1;
+  
 
   printf("Remote server connection - node: %d, vpid: %d, NLA %llx\n",server_node_id, server_vpid,server_nla);
   params.dest_node = server_node_id;
