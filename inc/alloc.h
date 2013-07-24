@@ -1,6 +1,7 @@
 /**
  * file: alloc.h
- * author: Alexander Merritt, merritt.alex@gatech.edu
+ * authors: Alexander Merritt, merritt.alex@gatech.edu
+ *          Jeff Young, jyoung9@gatech.edu
  * desc: interface for memory allocation governer
  */
 

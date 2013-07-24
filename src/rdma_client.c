@@ -1,7 +1,8 @@
 /* file: rdma_client.c
- * author: Alexander Merritt, merritt.alex@gatech.edu
- * desc: File taken from Adit Ranadive's commlib RDMA code and refactored for
- * OCM
+ * authors: Alexander Merritt, merritt.alex@gatech.edu
+ *          Jeff Young, jyoung9@gatech.edu
+ * desc: File taken from Adit Ranadive's commlib RDMA code 
+ * and refactored for OCM
  */
 
 /* System includes */

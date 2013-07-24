@@ -42,7 +42,7 @@ int extoll_server_connect(struct extoll_alloc *ex)
   RMA2_ERROR rc;
   int mem_result = 0;
 
-  printf("extoll_server_connect:: local_buff_size_B is %lu B\n",ex->params.buf_len);
+  printd("extoll_server_connect:: local_buff_size_B is %lu B\n",ex->params.buf_len);
   //Note that posix_memalign does a malloc, so the buffer should not be allocated yet!
 
       rc=rma2_open(&(ex->rma_conn.port));

@@ -37,13 +37,20 @@
 
 /* struct alloc_ation list */
 static pthread_mutex_t allocs_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t root_allocs_lock = PTHREAD_MUTEX_INITIALIZER;
 static LIST_HEAD(allocs);
+static LIST_HEAD(root_allocs);
 static unsigned int num_allocs = 0;
 
 #define for_each_alloc(alloc, allocs) \
     list_for_each_entry(alloc, &allocs, link)
 #define lock_allocs()    pthread_mutex_lock(&allocs_lock)
 #define unlock_allocs()  pthread_mutex_unlock(&allocs_lock)
+
+#define for_each_root_alloc(alloc, root_allocs) \
+    list_for_each_entry(alloc, &root_allocs, link)
+#define lock_root_allocs()    pthread_mutex_lock(&root_allocs_lock)
+#define unlock_root_allocs()  pthread_mutex_unlock(&root_allocs_lock)
 
 /* Private functions */
 
@@ -94,6 +101,7 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
     else if (req->type == ALLOC_MEM_RDMA) {
         //defined locally to avoid unused variable error
         struct node_entry *node = NULL;
+
         printd("req orig rank %d, num nodes %d\n",
                 req->orig_rank, node_file_entries);
         alloc->remote_rank = (req->orig_rank + 1) % node_file_entries; /* XXX */
@@ -123,10 +131,10 @@ alloc_find(struct alloc_request *req, struct alloc_ation *alloc)
     else BUG(1);
 
     INIT_LIST_HEAD(&alloc->link);
-    lock_allocs();
-    list_add(&alloc->link, &allocs);
+    lock_root_allocs();
+    list_add(&alloc->link, &root_allocs);
     num_allocs++;
-    unlock_allocs();
+    unlock_root_allocs();
 
     return 0;
 }
@@ -145,6 +153,7 @@ alloc_ate(struct alloc_ation *alloc)
     //Create a new allocation structure that can be saved on this node
     //to handle teardown
     struct alloc_ation *rem_alloc;
+    printd("Size of local alloc %lu, remote alloc %lu\n",sizeof(*alloc), sizeof(*rem_alloc));
     rem_alloc = calloc(1, sizeof(*rem_alloc));
 
     if (!alloc)
@@ -170,13 +179,13 @@ alloc_ate(struct alloc_ation *alloc)
         rem_alloc->type = ALLOC_MEM_RDMA;
     }
     #endif
+
     #ifdef EXTOLL
     if (alloc->type == ALLOC_MEM_RMA) {
         struct extoll_params p;
         p.buf_len   = alloc->bytes;
         //We don't need to allocate the buffer since connect does this
         //for us
-        ABORT2(!p.buf);
         if (!(rem_alloc->u.rma.ex_rem = extoll_new(&p)))
             ABORT();
         printd("EXTOLL: setting up server connection\n");
@@ -193,11 +202,14 @@ alloc_ate(struct alloc_ation *alloc)
     }
     #endif
     #ifdef CUDA
-    if (alloc->type == ALLOC_MEM_GPU)
+    else if (alloc->type == ALLOC_MEM_GPU)
     {
       printf("Remote CUDA allocations not supported!\n");
     }
     #endif
+    else {
+        BUG(1);
+    }
 
     //Add the local allocation ptr to a linked list so we can close the connection later
     INIT_LIST_HEAD(&alloc->link);
@@ -254,8 +266,7 @@ dealloc_ate(struct alloc_ation *alloc)
     #ifdef EXTOLL
     if (alloc->type == ALLOC_MEM_RMA) 
     {
-
-        if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true))
+      if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true))
             ABORT();
     }
     #endif 

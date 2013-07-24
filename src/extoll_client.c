@@ -35,7 +35,13 @@ int extoll_client_connect(struct extoll_alloc *ex)
 
   printf("Setting up remote memory connection to node %d, vpid %d, and 0x%lx NLA with RMA2\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
 
-  ex->rma_conn.buf = (void*)malloc(ex->params.buf_len);
+  int mem_result=posix_memalign((void**)&(ex->rma_conn.buf),4096,ex->params.buf_len);
+
+  if (mem_result!=0)
+  {
+    perror("Memory Buffer allocation failed. Bailing out.");
+    return -1;
+  }
 
   memset(ex->rma_conn.buf, 0, ex->params.buf_len);
   printd("Region starts at %p\n", ex->rma_conn.buf);

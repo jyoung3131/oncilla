@@ -29,7 +29,7 @@ To clean:
 
     $ scons -c [-Q]
 
--- Execution --
+-- Execution of OncillaMem--
 
 For an easy run (on octane*):
 
@@ -48,6 +48,14 @@ now).
 
     OCM_VERBOSE=1 ./oncillamem
 
+-- Execution of test applications--
+
+Applications must include oncillamem.h and need to
+link against the Oncillmem library, libocm. Currently, you
+will need to set your LD_LIBRARY_PATH to point to the 
+library path in the Oncilla main directory, e.g., 
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ONCILLA_ROOT/lib
+
 -- Using the API --
 
 TODO
@@ -58,7 +66,7 @@ maybe have these install to the system?
 -- DEV NOTES --
 
 if a process dies... the daemon perhaps should detect this and deallocate all
-memory that was allcoated to it
+memory that was allocated to it
 
 library must perform part of the allocation request, as malloc etc cannot be
 used if created in another process, such as the daemon

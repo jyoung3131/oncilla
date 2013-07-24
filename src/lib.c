@@ -164,26 +164,11 @@ out:
   return ret;
 }
 
-int ocm_extoll_disconnect(ocm_alloc_t extoll_alloc)
-{
-#ifdef EXTOLL
-  if (extoll_disconnect(extoll_alloc->u.rma.ex, false/*is client*/))
-    return -1;
-
-  //Free the EXTOLL structure
-  if(extoll_free(extoll_alloc->u.rma.ex))
-    return -1;
-#endif
-
-  return 0;
-}
-
 //Public access function to return the type of an allocation
 enum ocm_kind ocm_alloc_kind(ocm_alloc_t alloc)
 {
   return alloc->kind;
 }
-
 
 //Allocation function, ocm_alloc
   ocm_alloc_t
@@ -516,6 +501,8 @@ int ocm_copy_in(ocm_alloc_t dest, void *src)
   int
 ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 {
+
+  printd("Number of bytes in ocm_copy is %lu \n", cp_param->bytes);
 
 #ifdef CUDA
   cudaError_t cudaErr;

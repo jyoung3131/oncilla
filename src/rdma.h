@@ -1,5 +1,6 @@
 /* file: rdma.h
- * author: Alexander Merritt, merritt.alex@gatech.edu
+ * authors: Alexander Merritt, merritt.alex@gatech.edu
+ *          Jeff Young, jyoung9@gatech.edu
  * desc: internal data structures for the RDMA interface
  *
  * Original code modified from Adit Ranadive's commlib sources.

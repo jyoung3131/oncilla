@@ -52,7 +52,11 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
     struct ibv_send_wr      *bad_wr;
 
     /* "from" address and key */
-    BUG(src_offset > len);
+    if((src_offset+len) > ib->params.buf_len)
+    {
+      printf("Source offset %lu and send size %lu is larger than buffer length %lu\n",src_offset, len, ib->params.buf_len);
+      BUG(1);
+    }
 
     sge.addr   = (uintptr_t)(ib->params.buf+src_offset);
     sge.length = len;
@@ -296,6 +300,3 @@ ib_poll(ib_t ib)
 
     return 0;
 }
-
-/* TODO server functions */
-/* right now the server is stupid, just helps make memory then goes away */

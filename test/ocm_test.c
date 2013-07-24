@@ -53,8 +53,14 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
       printf("Testing allocation of local memory\n");
       break;
     case 2:
+#ifdef CUDA
       alloc_params->kind = OCM_LOCAL_GPU;
       printf("Testing allocation of local GPU memory\n");
+#else
+      printf("No CUDA support - exiting\n");
+      exit(-1);
+#endif
+
       break;
     case 3:
       alloc_params->kind = OCM_REMOTE_RDMA;
@@ -95,10 +101,9 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
         printf("alloc is local\n");
       }
     }
-  }
+  
 
-  for(i = 0; i < num_allocs; i++)
-  {
+ 
     if(ocm_free(a[i]))
     {
       printf("ocm_free failed\n");
@@ -107,16 +112,6 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   }
   free(alloc_params);
 
-  //**** For EXTOLL we must actively kill the client process
-  //to avoid leaving any pinned pages around
-  if(suboption == 4)
-  {
-    for(i = 0; i < num_allocs; i++)
-    {
-      if(ocm_extoll_disconnect(a[i]))
-        goto fail;
-    }
-  }
 
   if (0 > ocm_tini()) {
     printf("ocm_tini failed\n");
@@ -139,6 +134,10 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   ocm_alloc_param_t alloc_params;
   ocm_param_t copy_params;
 
+  //Using a very large buffer will avoid any crashing behavior.
+  //uint64_t alloc_size_B = pow(2,31)+1;
+  uint64_t alloc_size_B = local_size_B+1;
+
   if (0 > ocm_init()) {
     printf("Cannot connect to OCM\n");
     return -1;
@@ -146,8 +145,8 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
 
   //Create a structure that is used to configure the allocation on each endpoint
   alloc_params = calloc(1, sizeof(struct ocm_alloc_params));
-  alloc_params->local_alloc_bytes = local_size_B;
-  alloc_params->rem_alloc_bytes = rem_size_B;
+  alloc_params->local_alloc_bytes = alloc_size_B;
+  alloc_params->rem_alloc_bytes = alloc_size_B;
 #ifdef INFINIBAND
   alloc_params->kind = OCM_REMOTE_RDMA;
 #endif
@@ -184,10 +183,7 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
     goto fail;
   } 
 
-#ifdef EXTOLL
-  if(ocm_extoll_disconnect(a))
-    goto fail;
-#endif
+
 
   free(alloc_params);
   free(copy_params);
@@ -244,16 +240,18 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
     return -1;
   }
   printf("second local alloc success\n");
+
+#ifdef CUDA
   //GPU allocation
   alloc_params->kind = OCM_LOCAL_GPU;
-  /* 
-     gpu_alloc = ocm_alloc(alloc_params);
-     if (!gpu_alloc) {
-     printf("gpu ocm_alloc failed on gpu alloc size %lu\n", local_size_B);
-     return -1;
-     }
-     printf("gpu alloc success\n");
-     */ 
+  gpu_alloc = ocm_alloc(alloc_params);
+  if (!gpu_alloc) {
+    printf("gpu ocm_alloc failed on gpu alloc size %lu\n", local_size_B);
+    return -1;
+  }
+  printf("gpu alloc success\n");
+#endif
+
   // Remote alloc
   alloc_params->rem_alloc_bytes = rem_size_B;
 #ifdef INFINIBAND
@@ -315,7 +313,7 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
 #ifdef CUDA
   // remote->GPU
   if(ocm_copy(gpu_alloc, remote_alloc, copy_params)){
-    printf("ocm_copy from remote RMDA to GPU failed\n");
+    printf("ocm_copy from remote memory to GPU failed\n");
     return -1;
   }
 #endif
@@ -403,6 +401,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
     c++;
   }
 
+  ocm_free(a);
   //Free allocation and configuration parameters
   free(alloc_params);
   free(copy_params);
@@ -417,6 +416,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
 
 fail:
 
+  ocm_free(a);
   free(alloc_params);
   free(copy_params);
   if (0 > ocm_tini())
