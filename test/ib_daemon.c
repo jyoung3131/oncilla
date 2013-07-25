@@ -189,6 +189,7 @@ static int buffer_size_mismatch_test(void)
     return -1;
 
  if(teardown(ib) != 0)
+    return -1;
 
   return 0;
 }
