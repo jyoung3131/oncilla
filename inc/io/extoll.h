@@ -17,6 +17,7 @@
 #include "/extoll2/include/pmap.h"
 
 /* Project includes */
+#include <ocm_timer.h>
 
 /* Defines */
 
@@ -50,13 +51,13 @@ struct extoll_params {
 int extoll_init(void);
 extoll_t extoll_new(struct extoll_params *p);
 int extoll_free(extoll_t ex);
-int extoll_connect(extoll_t ex, bool is_server);
+int extoll_connect(extoll_t ex, bool is_server, ocm_timer_t tm);
 //Wait for notifications on server - typically used with put 
 //operations (client handles get notifications)
 void extoll_notification(extoll_t ex);
-int extoll_disconnect(extoll_t ex, bool is_server);
-int extoll_read(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len);
-int extoll_write(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len);
+int extoll_disconnect(extoll_t ex, bool is_server, ocm_timer_t tm);
+int extoll_read(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm);
+int extoll_write(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm);
 
 static void print_err(RMA2_ERROR err)
 {

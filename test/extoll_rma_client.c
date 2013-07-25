@@ -14,7 +14,7 @@ static unsigned int server_node_id;
 static unsigned int server_vpid;
 static unsigned long long server_nla;
 
-static extoll_t setup(struct extoll_params *p)
+static extoll_t setup(struct extoll_params *p, ocm_timer_t tm)
 {
   extoll_t ex;
 
@@ -24,21 +24,21 @@ static extoll_t setup(struct extoll_params *p)
   if (!(ex = extoll_new(p)))
     return (extoll_t)NULL;
 
-  if (extoll_connect(ex, false/*is client*/))
+  if (extoll_connect(ex, false/*is client*/, tm))
     return (extoll_t)NULL;
 
   return ex;
 }
 
 //Return 0 on success and 1 on failure
-static int teardown(extoll_t ex)
+static int teardown(extoll_t ex, ocm_timer_t tm)
 {
   int ret = 0;
 
   TIMER_DECLARE1(ex_disconnect_timer);
   TIMER_START(ex_disconnect_timer);
 
-  if (extoll_disconnect(ex, false/*is client*/))
+  if (extoll_disconnect(ex, false/*is client*/, tm))
     ret = 1;
 
 #ifdef TIMING
@@ -59,6 +59,8 @@ static int alloc_test(long long unsigned int size_B)
 {
   extoll_t ex;
   struct extoll_params params;
+  ocm_timer_t tm = NULL;
+  init_ocm_timer(&tm);
 
   printf("Allocating %llu bytes \n", size_B);
 
@@ -71,11 +73,13 @@ static int alloc_test(long long unsigned int size_B)
   params.dest_nla = server_nla;
   params.buf_len  = size_B;
 
-  if (!(ex = setup(&params)))
+  if (!(ex = setup(&params, tm)))
     return -1;
 
-  if(teardown(ex) != 0)
+  if(teardown(ex, tm) != 0)
     return -1;
+
+  destroy_ocm_timer(tm);
 
   /*Return 0 on succes*/
   return 0;
@@ -92,6 +96,8 @@ static int read_write_bw_test(uint64_t max_size_B)
   uint64_t extoll_write_time_ns = 0;
   uint64_t extoll_read_time_ns = 0;
   #endif
+  ocm_timer_t tm;
+  init_ocm_timer(&tm);
 
   extoll_t ex;
   struct extoll_params params;
@@ -108,7 +114,7 @@ static int read_write_bw_test(uint64_t max_size_B)
   //Allocation is in the extoll_server_connect function
   params.buf_len  = len;
   printf("Setting up\n");
-  if (!(ex = setup(&params))){
+  if (!(ex = setup(&params, tm))){
     printf("Setup failed\n");
     return -1;
   }
@@ -120,7 +126,7 @@ static int read_write_bw_test(uint64_t max_size_B)
     printf("------- %llu bytes -------\n", size_B);
     TIMER_START(extoll_write_timer);
     #endif
-    if(extoll_write(ex, 0, 0, len))
+    if(extoll_write(ex, 0, 0, len, tm))
     {
       printf("write failed\n");
       return -1;
@@ -140,7 +146,7 @@ static int read_write_bw_test(uint64_t max_size_B)
     printf("------- %llu bytes -------\n", size_B2);
     TIMER_START(extoll_read_timer);
     #endif 
-    if(extoll_read(ex, 0, 0, len))
+    if(extoll_read(ex, 0, 0, len, tm))
     {
       printf("read failed\n");
       return -1;
@@ -153,10 +159,12 @@ static int read_write_bw_test(uint64_t max_size_B)
     size_B2*=2;
   }
   //Perform teardown
-  if(teardown(ex) != 0){
+  if(teardown(ex, tm) != 0){
     printf("tear down error\n");
     return -1;
   }
+  
+  destroy_ocm_timer(tm);
 
   return 0; /* test passed */
 }
@@ -172,13 +180,16 @@ static int one_sided_test()
   size_t count = size_B/sizeof(uint32_t);
   size_t i;
   int ret = 0;
+  
+  ocm_timer_t tm;
+  init_ocm_timer(&tm);
 
   //Initialize the buffer to all 0s and then set the buffer length
   memset(&params, 0, sizeof(struct extoll_params));
 
   params.buf_len  = size_B;
 
-  if (!(ex = setup(&params)))
+  if (!(ex = setup(&params, tm)))
     return -1;
 
   uint32_t* buf_ptr = (uint32_t*)ex->rma_conn.buf;
@@ -186,7 +197,7 @@ static int one_sided_test()
     buf_ptr[i] = 1234;
 
   // send and wait for completion 
-  if (extoll_write(ex, 0, 0, size_B))
+  if (extoll_write(ex, 0, 0, size_B, tm))
     return -1;
 
   //Reset the buffer for read
@@ -194,7 +205,7 @@ static int one_sided_test()
 
   // read back and wait for completion
   printf("Reading back data\n");
-  if (extoll_read(ex, 0, 0, size_B))
+  if (extoll_read(ex, 0, 0, size_B, tm))
     return -1;
 
   for (i = 0; i < count; i++)
@@ -207,7 +218,7 @@ static int one_sided_test()
     }
   }
   //Perform teardown
-  if(teardown(ex) != 0)
+  if(teardown(ex, tm) != 0)
     ret = -1;
 
 

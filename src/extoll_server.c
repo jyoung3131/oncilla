@@ -38,7 +38,7 @@ static void sighandler(int sig)
 /* Public functions */
 
 //Function copied from RMA2 test code that sets up a buffer region and calls rma2_register on it.
-int extoll_server_connect(struct extoll_alloc *ex)
+int extoll_server_connect(struct extoll_alloc *ex, ocm_timer_t tm)
 {
   RMA2_ERROR rc;
   int mem_result = 0;
@@ -169,7 +169,7 @@ void extoll_server_notification(struct extoll_alloc *ex)
 
 }
 
-int extoll_server_disconnect(struct extoll_alloc *ex)
+int extoll_server_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
 {
 
   RMA2_ERROR rc;

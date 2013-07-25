@@ -364,7 +364,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     TIMER_DECLARE1(extoll_con_timer);
     TIMER_START(extoll_con_timer);
 #endif
-    if (extoll_connect(alloc->u.rma.ex, false))
+    if (extoll_connect(alloc->u.rma.ex, false, alloc_param->tm))
       goto out;
 #ifdef TIMING
     TIMER_END(extoll_con_timer, extoll_con_ns);
@@ -457,7 +457,7 @@ ocm_free(ocm_alloc_t a, ocm_timer_t tm)
     BUG(msg.type != MSG_RELEASE_APP);
 
     //release the local EXTOLL connection 
-    if (extoll_disconnect(a->u.rma.ex, false/*is client*/))
+    if (extoll_disconnect(a->u.rma.ex, false/*is client*/, tm))
       return -1;
 
     //Free the EXTOLL structure

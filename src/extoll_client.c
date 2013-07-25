@@ -30,7 +30,7 @@
 /* Private functions */
 
 /* Public functions */
-int extoll_client_connect(struct extoll_alloc *ex)
+int extoll_client_connect(struct extoll_alloc *ex, ocm_timer_t tm)
 {
  RMA2_ERROR rc;
   #ifdef TIMING
@@ -110,7 +110,7 @@ int extoll_client_connect(struct extoll_alloc *ex)
   return 0;
 }
 
-int extoll_client_disconnect(struct extoll_alloc *ex)
+int extoll_client_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
 {
   RMA2_ERROR rc;
   TIMER_DECLARE1(teardown_timer);

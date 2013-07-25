@@ -37,7 +37,7 @@ static int run_once;
 /* Private functions */
 
 //put_get_flag: put = 0; get = 1
-int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, size_t dest_offset, size_t len)
+int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
   RMA2_ERROR rc;
 
@@ -216,7 +216,7 @@ extoll_free(extoll_t ex)
   int ret = 0;
 
   //The buffer params.buf should be freed when
-  //pages are unregistered in extoll_client_disconnect)
+  //pages are unregistered in extoll_client_disconnect
 
   //Delete the EXTOLL object from the list
   list_del(&(ex->link));
@@ -238,16 +238,14 @@ void extoll_notification(extoll_t ex)
     run_once = 1;
     extoll_server_notification((struct extoll_alloc*)ex);
   }
-  //TODO - fix the RMA free path so that we don't need to call 
-  //the disconnect function here
-  extoll_server_disconnect((struct extoll_alloc*)ex);
+  //extoll_server_disconnect((struct extoll_alloc*)ex);
   //Pass a Ctrl-C so that the main daemon (in src/main.c) will also be terminated)
   raise(SIGINT);
 }
 
 //Close down the EXTOLL server and client applications
   int
-extoll_disconnect(extoll_t ex, bool is_server)
+extoll_disconnect(extoll_t ex, bool is_server, ocm_timer_t tm)
 {
   int err;
 
@@ -255,9 +253,9 @@ extoll_disconnect(extoll_t ex, bool is_server)
     return -1;
 
   if (is_server)
-    err = extoll_server_disconnect((struct extoll_alloc*)ex);
+    err = extoll_server_disconnect((struct extoll_alloc*)ex, tm);
   else
-    err = extoll_client_disconnect((struct extoll_alloc*)ex);
+    err = extoll_client_disconnect((struct extoll_alloc*)ex, tm);
 
   return err;
 }
@@ -266,7 +264,7 @@ extoll_disconnect(extoll_t ex, bool is_server)
 
 /* TODO provide an accept and connect separately, instead of the bool */
   int
-extoll_connect(extoll_t ex, bool is_server)
+extoll_connect(extoll_t ex, bool is_server, ocm_timer_t tm)
 {
   int err;
 
@@ -275,17 +273,17 @@ extoll_connect(extoll_t ex, bool is_server)
 
   if (is_server)
   {
-    err = extoll_server_connect((struct extoll_alloc*)ex);
+    err = extoll_server_connect((struct extoll_alloc*)ex, tm);
   }
   else
-    err = extoll_client_connect((struct extoll_alloc*)ex);
+    err = extoll_client_connect((struct extoll_alloc*)ex, tm);
 
   return err;
 }
 
 /* client function: pull data fom server */
   int
-extoll_read(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len)
+extoll_read(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
   if (!ex)
     return -1;
@@ -293,13 +291,13 @@ extoll_read(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len)
     printd("error: would read past end of remote buffer\n");
     return -1;
   }
-  return extoll_rma2_transfer(ex, 1, src_offset, dest_offset, len);
+  return extoll_rma2_transfer(ex, 1, src_offset, dest_offset, len, tm);
 
 }
 
 /* client function: push data to server */
   int
-extoll_write(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len)
+extoll_write(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
   if (!ex || len == 0)
     return -1;
@@ -307,6 +305,6 @@ extoll_write(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len)
     printd("error: would write past end of remote buffer\n");
     return -1;
   }
-  return extoll_rma2_transfer(ex, 0, src_offset, dest_offset, len);
+  return extoll_rma2_transfer(ex, 0, src_offset, dest_offset, len, tm);
 }
 

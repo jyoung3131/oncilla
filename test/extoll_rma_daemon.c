@@ -8,7 +8,7 @@
 #include <math.h>
 #include "../src/extoll.h"
 
-static extoll_t setup(struct extoll_params *p)
+static extoll_t setup(struct extoll_params *p, ocm_timer_t tm)
 {
   extoll_t ex = NULL;
 
@@ -20,21 +20,21 @@ static extoll_t setup(struct extoll_params *p)
 
   //We don't time this function because it has several blocking
   //statements within which provide a false picture of timing.
-  if (extoll_connect(ex, true/*is server*/))
+  if (extoll_connect(ex, true/*is server*/, tm))
     return (extoll_t)NULL;
 
   return ex;
 }
 
 //Return 0 on success and -1 on failure
-static int teardown(extoll_t ex)
+static int teardown(extoll_t ex, ocm_timer_t tm)
 {
   int ret = 0;
 
   TIMER_DECLARE1(ex_disconnect_timer);
   TIMER_START(ex_disconnect_timer);
 
-  if (extoll_disconnect(ex, true/*is server*/))
+  if (extoll_disconnect(ex, true/*is server*/, tm))
     ret = -1;
 
 #ifdef TIMING
@@ -56,6 +56,8 @@ static int alloc_test(long long unsigned int size_B)
 {
   extoll_t ex;
   struct extoll_params params;
+  ocm_timer_t tm;
+  init_ocm_timer(&tm);
 
   printf("Size of buffer is %llu  B\n", size_B);
 
@@ -66,7 +68,7 @@ static int alloc_test(long long unsigned int size_B)
   //Use bytes for the buffer length here
   params.buf_len  = size_B;
 
-  if (!(ex = setup(&params)))
+  if (!(ex = setup(&params, tm)))
     return -1;
 
   //Wait for the client to connect and perform read/write operations
@@ -74,8 +76,10 @@ static int alloc_test(long long unsigned int size_B)
   //we aren't doing reads/writes here.
   extoll_notification(ex);
 
-  if(teardown(ex) != 0)
+  if(teardown(ex, tm) != 0)
     return -1;
+
+  destroy_ocm_timer(tm);
 
   /*Return 0 on success*/
   return 0;
@@ -88,6 +92,8 @@ static int one_sided_test(void)
   extoll_t ex;
   struct extoll_params params;
   int ret_val = 0;
+  ocm_timer_t tm;
+  init_ocm_timer(&tm);
 
   size_t size_B = (1 << 10);
   size_t count = size_B/sizeof(uint32_t);
@@ -101,7 +107,7 @@ static int one_sided_test(void)
   //Use bytes for the buffer length here
   params.buf_len  = size_B;
 
-  if (!(ex = setup(&params)))
+  if (!(ex = setup(&params, tm)))
     return -1;
 
   uint32_t* buf_ptr = (uint32_t*)ex->rma_conn.buf;
@@ -121,8 +127,10 @@ static int one_sided_test(void)
       ret_val = -1;
     }
   
-  if(teardown(ex) != 0)
+  if(teardown(ex, tm) != 0)
     return -1;
+  
+  destroy_ocm_timer(tm);
 
   /*Return 0 on success*/
   return ret_val;
@@ -181,6 +189,8 @@ static int read_write_bw_test(uint64_t size_B)
 
   extoll_t ex;
   struct extoll_params params;
+  ocm_timer_t tm;
+  init_ocm_timer(&tm);
   //Allocate 2 GB of data
   //size_t size_B = pow(2,30)+1;
 
@@ -193,7 +203,7 @@ static int read_write_bw_test(uint64_t size_B)
   //Use bytes for the buffer length here
   params.buf_len  = size_B;
 
-  if (!(ex = setup(&params)))
+  if (!(ex = setup(&params, tm)))
     return -1;
 
   //Wait for the client to connect and perform read/write operations
@@ -201,8 +211,10 @@ static int read_write_bw_test(uint64_t size_B)
   //we aren't doing reads/writes here.
   extoll_notification(ex);
 
-  if(teardown(ex) != 0)
+  if(teardown(ex, tm) != 0)
     return -1;
+
+  destroy_ocm_timer(tm);
 
   /*Return 0 on success*/
   return 0;

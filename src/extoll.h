@@ -27,6 +27,9 @@
 
 #include <util/list.h>
 
+/* Directory includes */
+#include <ocm_timer.h>
+
 struct __rma_t {
   //An RMA port is a pointer to an RMA_Endpoint struct that contains
   //information about the RMA connection.
@@ -63,12 +66,12 @@ struct extoll_alloc
 };
 
 /* server functions */
-int extoll_server_connect(struct extoll_alloc *ex_alloc);
+int extoll_server_connect(struct extoll_alloc *ex_alloc, ocm_timer_t tm);
 void extoll_server_notification(struct extoll_alloc *ex_alloc);
-int extoll_server_disconnect(struct extoll_alloc *ex_alloc);
+int extoll_server_disconnect(struct extoll_alloc *ex_alloc, ocm_timer_t tm);
 
 /* client functions */
-int extoll_client_connect(struct extoll_alloc *ex_alloc);
-int extoll_client_disconnect(struct extoll_alloc *ex_alloc);
+int extoll_client_connect(struct extoll_alloc *ex_alloc, ocm_timer_t tm);
+int extoll_client_disconnect(struct extoll_alloc *ex_alloc, ocm_timer_t tm);
 
 #endif

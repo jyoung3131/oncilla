@@ -189,7 +189,7 @@ alloc_ate(struct alloc_ation *alloc)
         if (!(rem_alloc->u.rma.ex_rem = extoll_new(&p)))
             ABORT();
         printd("EXTOLL: setting up server connection\n");
-        if (extoll_connect(rem_alloc->u.rma.ex_rem, true))
+        if (extoll_connect(rem_alloc->u.rma.ex_rem, true, tm))
             ABORT();
 
         printd("EXTOLL parameters for the server are NodeID: %d VPID: %d and NLA %lx\n", rem_alloc->u.rma.ex_rem->params.dest_node, rem_alloc->u.rma.ex_rem->params.dest_vpid, rem_alloc->u.rma.ex_rem->params.dest_nla);
@@ -218,6 +218,8 @@ alloc_ate(struct alloc_ation *alloc)
     list_add(&rem_alloc->link, &allocs);
     unlock_allocs();
 
+    //We don't do anything with the timer currently - it is included mainly for
+    //compatibility with existing connect functions
     free(tm);
 
     return 0;
@@ -269,7 +271,7 @@ dealloc_ate(struct alloc_ation *alloc)
     #ifdef EXTOLL
     if (alloc->type == ALLOC_MEM_RMA) 
     {
-      if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true))
+      if (extoll_disconnect(rem_alloc->u.rma.ex_rem, true, tm))
             ABORT();
     }
     #endif 
