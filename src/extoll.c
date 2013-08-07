@@ -17,6 +17,7 @@
 
 /* Project includes */
 #include <util/list.h>
+#include <util/timer.h>
 #include <io/extoll.h>
 #include <debug.h>
 
@@ -40,6 +41,7 @@ static int run_once;
 int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
   RMA2_ERROR rc;
+  TIMER_DECLARE1(ex_timer);
 
   //The number of notifications specifies how many overlapping put/get operations we can 
   //**NOTE** Testing showed that increasing the number of notifications doesn't have a great impact
@@ -64,6 +66,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
   printd("RMA2 data transfer - need to transfer %lu B in 8 MB chunks\n", len);
   printd("Up to %d overlapping put/get operations are allowed\n", num_notis);
 
+  TIMER_START(ex_timer);
   while(len > 0)
   {
     //Each time through the loop update the base address to put/get to/from and then update
@@ -168,6 +171,9 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
       }
   }//end while
 
+  //Track the time for peforming a put/get over all bytes and waiting for notification. 
+  TIMER_END(ex_timer, tm->data_tm.rma.put_get_ns);
+  
   free(src_addr);
   free(dest_addr);
 

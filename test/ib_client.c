@@ -37,7 +37,7 @@ static int teardown(ib_t ib, ocm_timer_t tm)
     if (ib_disconnect(ib, false/*is client*/, tm))
       ret = 1;
 
-    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", tm->alloc.rdma.ib_total_disconnect_ns);
+    printf("[DISCONNECT] Time for ib_disconnect: %lu ns\n", tm->alloc_tm.rdma.ib_total_disconnect_ns);
    
     //Free the IB structure
     if(ib_free(ib))

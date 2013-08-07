@@ -32,25 +32,18 @@
 /* Public functions */
 int extoll_client_connect(struct extoll_alloc *ex, ocm_timer_t tm)
 {
- RMA2_ERROR rc;
-  #ifdef TIMING
-    uint64_t open_ns = 0;
-    uint64_t malloc_ns = 0;
-    uint64_t connect_ns = 0;
-    uint64_t register_ns = 0;
-    uint64_t total_setup_ns = 0;
-  #endif
+  RMA2_ERROR rc;
   int mem_result;
 
-   TIMER_DECLARE1(setup_timer);
+  TIMER_DECLARE1(setup_timer);
 
   printf("Setting up remote memory connection to node %d, vpid %d, and 0x%lx NLA with RMA2\n", ex->params.dest_node, ex->params.dest_vpid, ex->params.dest_nla);
 
   TIMER_START(setup_timer);
-    mem_result=posix_memalign((void**)&(ex->rma_conn.buf),4096,ex->params.buf_len);
-  TIMER_END(setup_timer, malloc_ns);
+  mem_result=posix_memalign((void**)&(ex->rma_conn.buf),4096,ex->params.buf_len);
+  TIMER_END(setup_timer, tm->alloc_tm.rma.malloc_ns);
   TIMER_CLEAR(setup_timer);
-  
+
   if (mem_result!=0)
   {
     perror("Memory Buffer allocation failed. Bailing out.");
@@ -59,11 +52,11 @@ int extoll_client_connect(struct extoll_alloc *ex, ocm_timer_t tm)
 
   memset(ex->rma_conn.buf, 0, ex->params.buf_len);
   printd("Region starts at %p\n", ex->rma_conn.buf);
-  
+
   printf("Opening port\n");
   TIMER_START(setup_timer);
-    rc=rma2_open(&(ex->rma_conn.port));
-  TIMER_END(setup_timer, open_ns);
+  rc=rma2_open(&(ex->rma_conn.port));
+  TIMER_END(setup_timer, tm->alloc_tm.rma.open_ns);
   TIMER_CLEAR(setup_timer);
 
   if (rc!=RMA2_SUCCESS) 
@@ -74,8 +67,8 @@ int extoll_client_connect(struct extoll_alloc *ex, ocm_timer_t tm)
 
   //Must connect to the remote node for put/get operations
   TIMER_START(setup_timer);
-    rc = rma2_connect(ex->rma_conn.port, ex->params.dest_node, ex->params.dest_vpid, ex->rma_conn.conn_type, &(ex->rma_conn.handle));
-  TIMER_END(setup_timer, connect_ns);
+  rc = rma2_connect(ex->rma_conn.port, ex->params.dest_node, ex->params.dest_vpid, ex->rma_conn.conn_type, &(ex->rma_conn.handle));
+  TIMER_END(setup_timer, tm->alloc_tm.rma.conn_ns);
   TIMER_CLEAR(setup_timer);
 
   if (rc!=RMA2_SUCCESS) 
@@ -83,29 +76,29 @@ int extoll_client_connect(struct extoll_alloc *ex, ocm_timer_t tm)
     print_err(rc);
     return -1;
   }
-	printf("Testing buffer\n");
+  printf("Testing buffer\n");
 
-	//uint32_t* buf = (uint32_t*)ex->rma_conn.buf;
-	//buf[0] = 2;
-	//buf[3] = 4;
-	//printf("The value of buf is %d \n", buf[3]);
+  //uint32_t* buf = (uint32_t*)ex->rma_conn.buf;
+  //buf[0] = 2;
+  //buf[3] = 4;
+  //printf("The value of buf is %d \n", buf[3]);
 
   printd("Registering with remote memory\n");
   //register pins the memory and associates it with an RMA2_Region
   TIMER_START(setup_timer);
-    rc=rma2_register(ex->rma_conn.port, ex->rma_conn.buf, ex->params.buf_len, &(ex->rma_conn.region));
-  TIMER_END(setup_timer, register_ns);
-  
+  rc=rma2_register(ex->rma_conn.port, ex->rma_conn.buf, ex->params.buf_len, &(ex->rma_conn.region));
+  TIMER_END(setup_timer, tm->alloc_tm.rma.reg_ns);
+
   if (rc!=RMA2_SUCCESS) 
   { 
     print_err(rc);
     return -1;
   }
 
-  #ifdef TIMING
-    total_setup_ns = malloc_ns + open_ns + connect_ns + register_ns;
-    printf("[CONNECT] malloc: %lu ns, open: %lu ns, connect : %lu ns, register %lu ns, total setup: %lu ns\n", malloc_ns, open_ns, connect_ns, register_ns, total_setup_ns);
-  #endif
+#ifdef TIMING
+  tm->alloc_tm.rma.tot_conn_ns = tm->alloc_tm.rma.malloc_ns + tm->alloc_tm.rma.open_ns + tm->alloc_tm.rma.conn_ns + tm->alloc_tm.rma.reg_ns;
+  printf("[CONNECT] malloc: %lu ns, open: %lu ns, connect : %lu ns, register %lu ns, total setup: %lu ns\n", tm->alloc_tm.rma.malloc_ns, tm->alloc_tm.rma.open_ns, tm->alloc_tm.rma.conn_ns, tm->alloc_tm.rma.reg_ns, tm->alloc_tm.rma.tot_conn_ns);
+#endif
 
   return 0;
 }
@@ -115,16 +108,10 @@ int extoll_client_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
   RMA2_ERROR rc;
   TIMER_DECLARE1(teardown_timer);
 
-  #ifdef TIMING
-    uint64_t disconnect_ns = 0;
-    uint64_t unregister_ns = 0;
-    uint64_t rma_close_ns = 0;
-  #endif
-
   printf("RMA2 disconnect\n");
   TIMER_START(teardown_timer);
-    rc=rma2_disconnect(ex->rma_conn.port,ex->rma_conn.handle);
-  TIMER_END(teardown_timer, disconnect_ns);
+  rc=rma2_disconnect(ex->rma_conn.port,ex->rma_conn.handle);
+  TIMER_END(teardown_timer, tm->alloc_tm.rma.discon_ns);
   TIMER_CLEAR(teardown_timer);
 
   if (rc!=RMA2_SUCCESS) 
@@ -132,10 +119,10 @@ int extoll_client_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
     print_err(rc);
     return -1;
   }
-  
+
   TIMER_START(teardown_timer);
   rc=rma2_unregister(ex->rma_conn.port, ex->rma_conn.region);
-  TIMER_END(teardown_timer, unregister_ns);
+  TIMER_END(teardown_timer, tm->alloc_tm.rma.unreg_ns);
   TIMER_CLEAR(teardown_timer);
 
   if (rc!=RMA2_SUCCESS) 
@@ -148,8 +135,8 @@ int extoll_client_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
   printf("Close the RMA port\n");
 
   TIMER_START(teardown_timer);
-    rc=rma2_close(ex->rma_conn.port);
-  TIMER_END(teardown_timer, rma_close_ns);
+  rc=rma2_close(ex->rma_conn.port);
+  TIMER_END(teardown_timer, tm->alloc_tm.rma.close_ns);
 
   if (rc!=RMA2_SUCCESS) 
   { 
@@ -157,9 +144,10 @@ int extoll_client_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
     return -1;
   }
 
-  #ifdef TIMING
-    printf("[DISCONNECT] Disconnect: %lu ns, Unregister: %lu ns, rma2_close: %lu ns, Total Teardown: %lu ns\n", disconnect_ns, unregister_ns, rma_close_ns, unregister_ns + rma_close_ns);
-  #endif
+#ifdef TIMING
+  tm->alloc_tm.rma.tot_discon_ns = tm->alloc_tm.rma.discon_ns + tm->alloc_tm.rma.unreg_ns + tm->alloc_tm.rma.close_ns;
+  printf("[DISCONNECT] Disconnect: %lu ns, Unregister: %lu ns, rma2_close: %lu ns, Total Teardown: %lu ns\n", tm->alloc_tm.rma.discon_ns, tm->alloc_tm.rma.unreg_ns, tm->alloc_tm.rma.close_ns, tm->alloc_tm.rma.tot_discon_ns);
+#endif
 
   //Free the memory region and associated buffer
   //free(ex->rma.region);

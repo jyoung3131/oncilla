@@ -98,11 +98,13 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
 #ifdef TIMING
     TIMER_END(ocm_alloc_timer, ocm_alloc_ns);
     TIMER_CLEAR(ocm_alloc_timer);
+
+#ifdef INFINIBAND
     if(alloc_params->kind == OCM_REMOTE_RDMA)
-    {
-      printf("Allocation time is %lu ns\n", tm->alloc.rdma.ib_total_conn_ns);
-      printf("OCM total time is %lu ns\n", ocm_alloc_ns);
-    }
+      printf("Allocation time is %lu ns\n", tm->alloc_tm.rdma.ib_total_conn_ns);
+#endif
+      
+    printf("OCM total time is %lu ns\n", ocm_alloc_ns);
     
 #endif     
 

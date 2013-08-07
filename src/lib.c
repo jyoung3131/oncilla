@@ -557,7 +557,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
   printd("Number of bytes in ocm_copy is %lu \n", cp_param->bytes);
 
 #ifdef CUDA
-  TIMER_DECLARE1(host_timer);
+  //TIMER_DECLARE1(host_timer);
   uint64_t tmp_ns = 0;
   cudaError_t cudaErr;
   float elapsed_ms = 0;
@@ -696,15 +696,12 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 #ifdef CUDA
     else if(dest->kind == OCM_LOCAL_GPU)
     {
-      TIMER_START(host_timer);
       if(extoll_read(src->u.rma.ex, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm))
       {
         printf("extoll_read failed in ocm_copy\n");
         return -1;
       }
-      TIMER_END(host_timer, tmp_ns);
-      TIMER_CLEAR(host_timer);
-      cp_param->tm->host_transfer_ns += tmp_ns;
+      cp_param->tm->host_transfer_ns += cp_param->tm->data_tm.rma.put_get_ns;
 
       cudaEventRecord(cp_param->tm->cuStart, 0);
 

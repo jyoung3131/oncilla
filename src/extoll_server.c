@@ -43,12 +43,6 @@ int extoll_server_connect(struct extoll_alloc *ex, ocm_timer_t tm)
   RMA2_ERROR rc;
   int mem_result = 0;
 
-  #ifdef TIMING  
-    uint64_t tot_setup_ns = 0;
-    uint64_t rma_open_ns = 0;
-    uint64_t malloc_ns = 0;
-    uint64_t rma_register_ns = 0;
-  #endif
 
   TIMER_DECLARE1(tmp_timer);
 
@@ -57,7 +51,7 @@ int extoll_server_connect(struct extoll_alloc *ex, ocm_timer_t tm)
 
   TIMER_START(tmp_timer);
       rc=rma2_open(&(ex->rma_conn.port));
-  TIMER_END(tmp_timer, rma_open_ns);
+  TIMER_END(tmp_timer, tm->alloc_tm.rma.open_ns);
   TIMER_CLEAR(tmp_timer);
 
   if (rc!=RMA2_SUCCESS)
@@ -86,7 +80,7 @@ int extoll_server_connect(struct extoll_alloc *ex, ocm_timer_t tm)
 
   TIMER_START(tmp_timer);
     mem_result=posix_memalign((void**)&(ex->rma_conn.buf),4096,ex->params.buf_len);
-  TIMER_END(tmp_timer, malloc_ns);
+  TIMER_END(tmp_timer, tm->alloc_tm.rma.malloc_ns);
   TIMER_CLEAR(tmp_timer);
 
   if (mem_result!=0)
@@ -98,7 +92,7 @@ int extoll_server_connect(struct extoll_alloc *ex, ocm_timer_t tm)
   //Registration pins the pages in a manner similar to ibv_reg_mr for IB 
   TIMER_START(tmp_timer);
     rc=rma2_register(ex->rma_conn.port, ex->rma_conn.buf, ex->params.buf_len, &(ex->rma_conn.region));
-  TIMER_END(tmp_timer, rma_register_ns);
+  TIMER_END(tmp_timer, tm->alloc_tm.rma.reg_ns);
 
   if (rc!=RMA2_SUCCESS)
   {
@@ -125,8 +119,8 @@ int extoll_server_connect(struct extoll_alloc *ex, ocm_timer_t tm)
   }
 
   #ifdef TIMING
-    tot_setup_ns = rma_open_ns + malloc_ns + rma_register_ns;
-    printf("[CONNECT] rma2_open: %lu ns, Malloc mem: %lu ns, Registration: %lu ns, Total Setup: %lu ns\n", rma_open_ns, malloc_ns, rma_register_ns, tot_setup_ns);
+    tm->alloc_tm.rma.tot_conn_ns = tm->alloc_tm.rma.open_ns + tm->alloc_tm.rma.malloc_ns + tm->alloc_tm.rma.reg_ns;
+    printf("[CONNECT] rma2_open: %lu ns, Malloc mem: %lu ns, Registration: %lu ns, Total Setup: %lu ns\n", tm->alloc_tm.rma.open_ns, tm->alloc_tm.rma.malloc_ns, tm->alloc_tm.rma.reg_ns, tm->alloc_tm.rma.tot_conn_ns);
   #endif
  
   ex->params.dest_node = rma2_get_nodeid(ex->rma_conn.port);
@@ -176,12 +170,6 @@ int extoll_server_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
 
   TIMER_DECLARE1(teardown_timer);
 
-  #ifdef TIMING
-    uint64_t unregister_ns = 0;
-    uint64_t rma_close_ns = 0;
-    uint64_t teardown_ns = 0;
-  #endif
-
   //Note that disconnect is not needed on this end, since we
   //never performed rma2_connect
 
@@ -189,7 +177,7 @@ int extoll_server_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
   printf("Unregister pages\n");
   TIMER_START(teardown_timer);
     rc=rma2_unregister(ex->rma_conn.port, ex->rma_conn.region);
-  TIMER_END(teardown_timer, unregister_ns);
+  TIMER_END(teardown_timer, tm->alloc_tm.rma.unreg_ns);
   TIMER_CLEAR(teardown_timer);
 
   if (rc!=RMA2_SUCCESS) 
@@ -203,7 +191,7 @@ int extoll_server_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
   ///rma_disconnect(port,handle);
   TIMER_START(teardown_timer);
     rc=rma2_close(ex->rma_conn.port);
-  TIMER_END(teardown_timer, rma_close_ns);
+  TIMER_END(teardown_timer, tm->alloc_tm.rma.close_ns);
   TIMER_CLEAR(teardown_timer);
 
   if (rc!=RMA2_SUCCESS) 
@@ -213,8 +201,8 @@ int extoll_server_disconnect(struct extoll_alloc *ex, ocm_timer_t tm)
   }
 
   #ifdef TIMING
-    teardown_ns = unregister_ns + rma_close_ns;
-    printf("[DISCONNECT] Unregister pages: %lu ns, rma2_close: %lu ns, Total Teardown: %lu ns\n", unregister_ns, rma_close_ns, teardown_ns);
+    tm->alloc_tm.rma.tot_discon_ns = tm->alloc_tm.rma.unreg_ns + tm->alloc_tm.rma.close_ns;
+    printf("[DISCONNECT] Unregister pages: %lu ns, rma2_close: %lu ns, Total Teardown: %lu ns\n", tm->alloc_tm.rma.unreg_ns, tm->alloc_tm.rma.close_ns, tm->alloc_tm.rma.tot_discon_ns);
   #endif
 
   //free(ex->rma.buf);
