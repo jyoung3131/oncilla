@@ -82,7 +82,7 @@ post_send(struct ib_alloc *ib, int opcode, size_t src_offset, size_t dest_offset
         perror("ibv_post_send");
         return -1;
     }
-    TIMER_END(ib_timer, tm->data_tm.rdma.ib_post_ns);
+    TIMER_END(ib_timer, tm->data_tm.rdma.post_ns);
 
     return 0;
 }
@@ -302,7 +302,7 @@ ib_poll(ib_t ib, ocm_timer_t tm)
             return -1;
 
     } while (ne);
-    TIMER_END(ib_timer, tm->data_tm.rdma.ib_poll_ns);
+    TIMER_END(ib_timer, tm->data_tm.rdma.poll_ns);
     TIMER_CLEAR(ib_timer);
 
     return 0;

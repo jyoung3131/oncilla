@@ -34,28 +34,28 @@ struct oncilla_timer
       uint64_t open_ns;
       uint64_t malloc_ns;
       uint64_t reg_ns;
-      uint64_t tot_conn_ns;
       //deallocation timers
       uint64_t discon_ns;
       uint64_t close_ns;
-      uint64_t unreg_ns;
-      uint64_t tot_discon_ns;
+      uint64_t dereg_ns;
     } rma;
 #endif
 #ifdef INFINIBAND
     struct 
     {
       //allocation timers
-      uint64_t ib_mem_reg_ns;    
-      uint64_t ib_create_qp_ns;
-      uint64_t ib_total_conn_ns;
+      uint64_t create_qp_ns;
+      uint64_t reg_ns;    
       //deallocation timers
-      uint64_t ib_total_disconnect_ns;
-      uint64_t ib_destroy_qp_ns;
-      uint64_t ib_mem_dereg_ns; 
+      uint64_t destroy_qp_ns;
+      uint64_t dereg_ns; 
     } rdma;
 #endif
   } alloc_tm;
+  
+  //Total amount of time to create/teardown a connection
+  uint64_t tot_setup_ns; 
+  uint64_t tot_teardown_ns; 
 
   union {
 #ifdef EXTOLL
@@ -83,6 +83,10 @@ struct oncilla_timer
   uint64_t host_transfer_ns;
   //time to transfer data from the host to the GPU
   uint64_t gpu_transfer_ns;
+
+  uint64_t tot_transfer_B;
+  uint64_t host_transfer_B;
+  uint64_t gpu_transfer_B;
 
   //number of allocations used for timing tracking
   uint64_t num_allocs;
@@ -116,45 +120,100 @@ static void init_ocm_timer(ocm_timer_t* tm)
 static void accum_ocm_timer(ocm_timer_t* dest, const ocm_timer_t src)
 {
 #ifdef INFINIBAND
-  (*dest)->alloc_tm.rdma.ib_mem_reg_ns += src->alloc_tm.rdma.ib_mem_reg_ns;
-  (*dest)->alloc_tm.rdma.ib_create_qp_ns += src->alloc_tm.rdma.ib_create_qp_ns;
-  (*dest)->alloc_tm.rdma.ib_total_conn_ns += src->alloc_tm.rdma.ib_total_conn_ns;
-  (*dest)->alloc_tm.rdma.ib_mem_dereg_ns += src->alloc_tm.rdma.ib_mem_dereg_ns;
-  (*dest)->alloc_tm.rdma.ib_destroy_qp_ns += src->alloc_tm.rdma.ib_destroy_qp_ns;
-  (*dest)->alloc_tm.rdma.ib_total_disconnect_ns += src->alloc_tm.rdma.ib_total_disconnect_ns;
+  (*dest)->alloc_tm.rdma.reg_ns += src->alloc_tm.rdma.reg_ns;
+  (*dest)->alloc_tm.rdma.create_qp_ns += src->alloc_tm.rdma.create_qp_ns;
+  (*dest)->alloc_tm.rdma.dereg_ns += src->alloc_tm.rdma.dereg_ns;
+  (*dest)->alloc_tm.rdma.destroy_qp_ns += src->alloc_tm.rdma.destroy_qp_ns;
 
-  (*dest)->data_tm.rdma.ib_post_ns += src->data_tm.rdma.ib_post_ns;
-  (*dest)->data_tm.rdma.ib_poll_ns += src->data_tm.rdma.ib_poll_ns;
+  (*dest)->data_tm.rdma.post_ns += src->data_tm.rdma.post_ns;
+  (*dest)->data_tm.rdma.poll_ns += src->data_tm.rdma.poll_ns;
 #endif
 #ifdef EXTOLL
   (*dest)->alloc_tm.rma.conn_ns += src->alloc_tm.rma.conn_ns;
   (*dest)->alloc_tm.rma.open_ns += src->alloc_tm.rma.open_ns;
   (*dest)->alloc_tm.rma.malloc_ns += src->alloc_tm.rma.malloc_ns;
   (*dest)->alloc_tm.rma.reg_ns += src->alloc_tm.rma.reg_ns;
-  (*dest)->alloc_tm.rma.tot_conn_ns += src->alloc_tm.rma.tot_conn_ns;
   (*dest)->alloc_tm.rma.discon_ns += src->alloc_tm.rma.discon_ns;
   (*dest)->alloc_tm.rma.close_ns += src->alloc_tm.rma.close_ns;
-  (*dest)->alloc_tm.rma.unreg_ns += src->alloc_tm.rma.unreg_ns;
-  (*dest)->alloc_tm.rma.tot_discon_ns += src->alloc_tm.rma.tot_discon_ns;
+  (*dest)->alloc_tm.rma.dereg_ns += src->alloc_tm.rma.dereg_ns;
 #endif
+
+  (*dest)->tot_setup_ns += src->tot_setup_ns;
+  (*dest)->tot_teardown_ns += src->tot_teardown_ns;
 
   (*dest)->host_transfer_ns += src->host_transfer_ns;
   (*dest)->gpu_transfer_ns += src->gpu_transfer_ns;
+  (*dest)->tot_transfer_ns += src->tot_transfer_ns;
+}
+
+static void print_ocm_alloc_timer(ocm_timer_t tm)
+{
+  printf("Averaged Statistics for Oncilla timer:\n\t"
+      "Allocations: %lu\n", tm->num_allocs);
+
+#ifdef INFINIBAND
+  printf("[CONNECT] Time for ibv_reg_mr: %6f ns\n"
+      "[CONNECT] Time for rdma_create_qp: %6f ns\n",
+      (double)(tm->alloc_tm.rdma.reg_ns/tm->num_allocs), (double)(tm->alloc_tm.rdma.create_qp_ns/tm->num_allocs));
+#elif EXTOLL
+  printf("[CONNECT] Total time for malloc: %6f ns\n",
+      "[CONNECT] Time for rma_register: %6f ns\n"
+      "[CONNECT] Time for rma_open: %6f ns\n"
+      "[CONNECT] Total time for rma_connect: %6f ns\n",
+      (double)(tm->alloc_tm.rma.malloc_ns/tm->num_allocs), (double)(tm->alloc_tm.rma.reg_ns/tm->num_allocs),
+      (double)(tm->alloc_tm.rma.open_ns/tm->num_allocs), (double)(tm->alloc_tm.rma.conn_ns/tm->num_allocs));
+#endif
+   
+  printf("[CONNECT] Total time for connection: %6f ns\n", (double)(tm->tot_setup_ns/tm->num_allocs));
+}
+
+static void print_ocm_teardown_timer(ocm_timer_t tm)
+{
+  printf("Averaged Statistics for Oncilla timer:\n\t"
+      "Allocations: %lu\n", tm->num_allocs);
+
+#ifdef INFINIBAND
+  printf("[DISCONNECT] Time for ibv_unreg_mr: %6f ns\n"
+      "[DISCONNECT] Time for rdma_destroy_qp: %6f ns\n",
+      (double)(tm->alloc_tm.rdma.dereg_ns/tm->num_allocs), (double)(tm->alloc_tm.rdma.destroy_qp_ns/tm->num_allocs));
+#elif EXTOLL
+  printf("[DISCONNECT] Time for rma_unregister: %6f ns\n"
+      "[DISCONNECT] Time for rma_close: %6f ns\n"
+      "[DISCONNECT] Total time for rma_disconnect: %6f ns\n",
+      (double)(tm->alloc_tm.rma.dereg_ns/tm->num_allocs), (double)(tm->alloc_tm.rma.close_ns/tm->num_allocs),
+      (double)(tm->alloc_tm.rma.discon_ns/tm->num_allocs));
+#endif
+
+  printf("[DISCONNECT] Total time for teardown: %6f ns\n", (double)(tm->tot_teardown_ns/tm->num_allocs));
+}
+
+static void print_ocm_transfer_timer(ocm_timer_t tm)
+{
+
+  printf("Averaged Statistics for Oncilla timer:\n\t"
+      "Transfers: %lu\n", tm->num_transfers);
+
+#ifdef INFINIBAND
+  printf("IB post: %lu ns, poll: %lu ns\n", tm->data_tm.rdma.post_ns, tm->data_tm.rdma.poll_ns);
+#elif EXTOLL
+  printf("EXTOLL put or get: %lu ns\n", tm->data_tm.rma.put_get_ns);
+#endif
+
+  printf("Time for host transfers: %6f ns\n"
+      "Time for GPU transfers: %6f ns\n",
+      (double)(tm->host_transfer_ns/tm->num_transfers), (double)(tm->gpu_transfer_ns/tm->num_transfers));
+
+  printf("Total time for transfers: %6f ns\n", (double)(tm->tot_transfer_ns/tm->num_transfers));
+
 }
 
 static void print_ocm_timer(ocm_timer_t tm)
 {
-  printf("Statistics for Oncilla timer:\n\t"
-      "Allocations: %lu\n\t"
-      "Transfers: %lu\n", tm->num_allocs, tm->num_transfers);
-
-#ifdef INFINIBAND
-  printf("[CONNECT] Time for ibv_reg_mr: %6f ns\n"
-      "[CONNECT] Time for rdma_create_qp: %6f ns\n"
-      "[CONNECT] Total time for connection: %6f ns\n",
-      (double)(tm->alloc_tm.rdma.ib_mem_reg_ns/tm->num_allocs), (double)(tm->alloc_tm.rdma.ib_create_qp_ns/tm->num_allocs), (double)(tm->alloc_tm.rdma.ib_total_conn_ns/tm->num_allocs));
-#endif
-
+  print_ocm_alloc_timer(tm);
+  
+  print_ocm_teardown_timer(tm);
+  
+  print_ocm_transfer_timer(tm);
 }
 
 static void destroy_ocm_timer(ocm_timer_t tm)
@@ -162,4 +221,4 @@ static void destroy_ocm_timer(ocm_timer_t tm)
   free(tm);
 }
 
-#endif 
+#endif //OCM_TIMER 

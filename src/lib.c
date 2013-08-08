@@ -556,6 +556,8 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
 
   printd("Number of bytes in ocm_copy is %lu \n", cp_param->bytes);
 
+  cp_param->tm->num_transfers++;
+
 #ifdef CUDA
   //TIMER_DECLARE1(host_timer);
   uint64_t tmp_ns = 0;
@@ -585,6 +587,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
       memcpy(dest->u.rdma.local_ptr+cp_param->dest_offset, src->u.local.ptr+cp_param->src_offset, cp_param->bytes);
       if(ib_write(dest->u.rdma.ib, cp_param->src_offset_2, cp_param->dest_offset_2, cp_param->bytes, cp_param->tm)||ib_poll(dest->u.rdma.ib, cp_param->tm))
         return -1;
+      cp_param->tm->host_transfer_ns += (cp_param->tm->data_tm.rdma.post_ns + cp_param->tm->data_tm.rdma.poll_ns);
     }
 #endif
 #ifdef EXTOLL
@@ -637,20 +640,21 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
       //Remember to call both ib_read and ib_poll in order to correctly measure the time taken for the transfer
       if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm)||ib_poll(src->u.rdma.ib, cp_param->tm))
         return -1;
+      
+      cp_param->tm->host_transfer_ns += (cp_param->tm->data_tm.rdma.post_ns + cp_param->tm->data_tm.rdma.poll_ns);
+      
       memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rdma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
     }
 #ifdef CUDA
     else if(dest->kind == OCM_LOCAL_GPU)
     {
-      TIMER_START(host_timer);
       //Remember to call both ib_read and ib_poll in order to correctly measure the time taken for the transfer
       if(ib_read(src->u.rdma.ib, cp_param->src_offset, cp_param->dest_offset, cp_param->bytes, cp_param->tm)||ib_poll(src->u.rdma.ib, cp_param->tm))
         return -1;
-      TIMER_END(host_timer, tmp_ns);
-      TIMER_CLEAR(host_timer);
-      cp_param->tm->host_transfer_ns += tmp_ns;
-      printd("Total host time %lu ns and this time %lu ns\n",  cp_param->tm->host_transfer_ns, tmp_ns);
+      
+      cp_param->tm->host_transfer_ns += (cp_param->tm->data_tm.rdma.post_ns + cp_param->tm->data_tm.rdma.poll_ns);
+      printd("Total host time %lu ns\n",  cp_param->tm->host_transfer_ns);
 
       cudaEventRecord(cp_param->tm->cuStart, 0);
 
@@ -667,8 +671,6 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
         printf("cudaMemcpy failed with error %d \n", cudaErr);
         return -1;
       }
-      //TIMER_END(gpu_timer, tmp_ns);
-      //TIMER_CLEAR(gpu_timer);
       cp_param->tm->gpu_transfer_ns += tmp_ns;
     }
 #endif
@@ -689,6 +691,7 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
         printf("extoll_read failed in ocm_copy\n");
         return -1;
       }
+      cp_param->tm->host_transfer_ns += cp_param->tm->data_tm.rma.put_get_ns;
 
       memcpy(dest->u.local.ptr+cp_param->dest_offset,src->u.rma.local_ptr+cp_param->src_offset, cp_param->bytes);
 
@@ -764,6 +767,8 @@ ocm_copy(ocm_alloc_t dest, ocm_alloc_t src, ocm_param_t cp_param)
   int
 ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
 {
+  cp_param->tm->num_transfers++;
+
   if((src->kind == OCM_LOCAL_HOST) || (src->kind == OCM_LOCAL_GPU))
   {
     printf("Error - one-sided copy needs a paired connection, such as IB or EXTOLL\n");
@@ -791,6 +796,8 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
       return -1;
     }
   }
+  
+  cp_param->tm->host_transfer_ns +=  (cp_param->tm->data_tm.rdma.post_ns + cp_param->tm->data_tm.rdma.poll_ns);
 #endif
 #ifdef EXTOLL
   if(cp_param->bytes > src->u.rma.local_bytes)
@@ -813,7 +820,10 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
       return -1;
     }
   }
+  
+  cp_param->tm->host_transfer_ns += cp_param->tm->data_tm.rma.put_get_ns;
 #endif
+
   return 0;
 }
 

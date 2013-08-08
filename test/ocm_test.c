@@ -86,25 +86,26 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
       print_usage("ocm_test");
   }
 
+  uint64_t ocm_alloc_ns = 0;
+  uint64_t ocm_teardown_ns = 0;
+  uint64_t ocm_tmp_ns = 0;
+
   for(i = 0; i < num_allocs; i++)
   {
 
 #ifdef TIMING
-    uint64_t ocm_alloc_ns = 0;
     TIMER_DECLARE1(ocm_alloc_timer);
     TIMER_START(ocm_alloc_timer);
 #endif     
     a[i] = ocm_alloc(alloc_params);
 #ifdef TIMING
-    TIMER_END(ocm_alloc_timer, ocm_alloc_ns);
+    TIMER_END(ocm_alloc_timer, ocm_tmp_ns);
     TIMER_CLEAR(ocm_alloc_timer);
 
-#ifdef INFINIBAND
-    if(alloc_params->kind == OCM_REMOTE_RDMA)
-      printf("Allocation time is %lu ns\n", tm->alloc_tm.rdma.ib_total_conn_ns);
-#endif
+    printf("Allocation time is %lu ns\n", tm->tot_setup_ns);
       
-    printf("OCM total time is %lu ns\n", ocm_alloc_ns);
+    printf("OCM allocation time is %lu ns\n", ocm_tmp_ns);
+    ocm_alloc_ns += ocm_tmp_ns;
     
 #endif     
 
@@ -136,12 +137,17 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
       goto fail;
     }
     
+    printf("OCM teardown time is %lu ns\n", ocm_tmp_ns);
+    ocm_teardown_ns += ocm_tmp_ns;
+    
     //Add the timing values to a running counter timer
     tot_timer->num_allocs++;
     accum_ocm_timer(&tot_timer, tm);
   }
  
   print_ocm_timer(tot_timer);
+
+  printf("Average Oncilla time for allocation: %6f ns, deallocation: %6f ns\n", (double)(ocm_alloc_ns/tot_timer->num_allocs), (double)(ocm_teardown_ns/tot_timer->num_allocs));
 
   destroy_ocm_timer(tm);
   free(alloc_params);
@@ -202,6 +208,10 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   copy_params->dest_offset = 0;
   copy_params->bytes = local_size_B;
   copy_params->op_flag = 0;
+  //It's ok to use the same timer for allocation and transfers since
+  //they update exclusive time values
+  copy_params->tm = tm;
+
 
   //Use a one-sided copy since we are copying from a local-remote IB or EXTOLL
   //paired object
@@ -221,6 +231,9 @@ static int copy_onesided_test(uint64_t local_size_B, uint64_t rem_size_B){
   } 
 
   ocm_free(a, tm);
+
+  print_ocm_timer(tm);
+
   free(tm);
   free(alloc_params);
   free(copy_params);
@@ -323,17 +336,27 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
     return -1;    
   }
 
+  //Print out timing information and reset the timer
+  print_ocm_transfer_timer(tm);
+  reset_ocm_timer(&tm);
+
   // GPU->remote 
   if(ocm_copy(remote_alloc, gpu_alloc, copy_params)){
     printf("ocm_copy from GPU to remote memory failed\n");
     return -1;
   }
+  
+  print_ocm_transfer_timer(tm);
+  reset_ocm_timer(&tm);
 #endif
   // Host->host
   if(ocm_copy(local_alloc2, local_alloc, copy_params)){
     printf("ocm_copy from host to host failed\n");
     return -1;
   }
+  
+  print_ocm_transfer_timer(tm);
+  reset_ocm_timer(&tm);
 
   // Host->remote 
   if(ocm_copy(remote_alloc, local_alloc, copy_params)){
@@ -346,18 +369,28 @@ static int copy_twosided_test(uint64_t local_size_B,uint64_t rem_size_B){
     printf("ocm_copy from host to GPU failed\n");
     return -1;
   }
+  
+  print_ocm_transfer_timer(tm);
+  reset_ocm_timer(&tm);
+
 #endif
   // remote->host
   if(ocm_copy(local_alloc,remote_alloc, copy_params)){
     printf("ocm_copy from remote to local failed\n");
     return -1;
   }
+  
+  print_ocm_transfer_timer(tm);
+  reset_ocm_timer(&tm);
 #ifdef CUDA
   // remote->GPU
   if(ocm_copy(gpu_alloc, remote_alloc, copy_params)){
     printf("ocm_copy from remote memory to GPU failed\n");
     return -1;
   }
+  
+  print_ocm_transfer_timer(tm);
+  reset_ocm_timer(&tm);
 #endif
   return 0;
 }
@@ -366,9 +399,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   ocm_alloc_t a;
 
 #ifdef TIMING
-  uint64_t ocm_bw_ns[num_iter];
   double ocm_tot_bw_ns = 0;
-  TIMER_DECLARE1(ocm_bw_timer);
 #endif     
 
   ocm_alloc_param_t alloc_params;
@@ -423,18 +454,18 @@ static int read_write_bw_test(int num_iter, int alloc_type){
     for (i=0; i<num_iter; i++){
       counter++;
       //printf("reading\n");
-      TIMER_START(ocm_bw_timer);
       if(ocm_copy_onesided(a, copy_params)){
         printf("ocm_copy_onesided (read) failed at size %lu\n",local_size_B);
         goto fail;
       }
-      TIMER_END(ocm_bw_timer, ocm_bw_ns[i]);
-      TIMER_CLEAR(ocm_bw_timer);
-      ocm_tot_bw_ns += ocm_bw_ns[i];  
+      //Each iteration adds the time to tm
     }
-    ocm_tot_bw_ns = ocm_tot_bw_ns / num_iter;
+    ocm_tot_bw_ns = tm->tot_transfer_ns / num_iter;
     printf("Read for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
+
     local_size_B*=2;
+    //Reset the timer each time
+    reset_ocm_timer(&tm);
   }
 
 
@@ -454,20 +485,18 @@ static int read_write_bw_test(int num_iter, int alloc_type){
     for (i=0; i<num_iter; i++){
       counter++;
       //printf("writing\n");
-      TIMER_START(ocm_bw_timer);
       if(ocm_copy_onesided(a, copy_params))
       {
         printf("ocm_copy_onesided (write) failed at size %lu count: %d\n", local_size_B, c);
         goto fail;
       }
-      TIMER_END(ocm_bw_timer, ocm_bw_ns[i]);
-      TIMER_CLEAR(ocm_bw_timer);
-      ocm_tot_bw_ns += ocm_bw_ns[i];  
+      c++;
     }
-    ocm_tot_bw_ns = ocm_tot_bw_ns / num_iter;
+    ocm_tot_bw_ns = tm->tot_transfer_ns / num_iter;
     printf("Read for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
+    
     local_size_B*=2;
-    c++;
+    reset_ocm_timer(&tm);
   }
 
   ocm_free(a, tm);

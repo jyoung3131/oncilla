@@ -86,7 +86,7 @@ ib_server_connect(struct ib_alloc *ib, ocm_timer_t tm)
     #ifdef TIMING
     //stop timer to ignore wait blocks
     TIMER_END(ib_server_conn_timer, ib_conn_tmp_ns);
-    tm->alloc_tm.rdma.ib_total_conn_ns += ib_conn_tmp_ns;
+    tm->tot_setup_ns += ib_conn_tmp_ns;
     #endif
 
     printd("waiting for connection on port %d...\n", ib->params.port);
@@ -140,7 +140,7 @@ ib_server_connect(struct ib_alloc *ib, ocm_timer_t tm)
         return -1;
     }
   
-    TIMER_END(ib_server_timer, tm->alloc_tm.rdma.ib_mem_reg_ns);
+    TIMER_END(ib_server_timer, tm->alloc_tm.rdma.reg_ns);
 
 
     //Reset the timer so it can be reused
@@ -163,7 +163,7 @@ ib_server_connect(struct ib_alloc *ib, ocm_timer_t tm)
     if (rdma_create_qp(ib->rdma.id, ib->verbs.pd, &ib->verbs.qp_attr))
         return -1;
   
-    TIMER_END(ib_server_timer, tm->alloc_tm.rdma.ib_create_qp_ns);
+    TIMER_END(ib_server_timer, tm->alloc_tm.rdma.create_qp_ns);
       /* don't need to post a recv... */
 #if 0
     struct ibv_sge sge;
@@ -205,7 +205,7 @@ ib_server_connect(struct ib_alloc *ib, ocm_timer_t tm)
     #ifdef TIMING
     //stop timer to ignore wait blocks
     TIMER_END(ib_server_conn_timer, ib_conn_tmp_ns);
-    tm->alloc_tm.rdma.ib_total_conn_ns += ib_conn_tmp_ns;
+    tm->tot_setup_ns += ib_conn_tmp_ns;
     #endif
 
     if (rdma_get_cm_event(ib->rdma.ch, &ib->rdma.evt))
@@ -224,13 +224,13 @@ ib_server_connect(struct ib_alloc *ib, ocm_timer_t tm)
     #ifdef TIMING
     //end total connection timer
     TIMER_END(ib_server_conn_timer, ib_conn_tmp_ns);   
-    tm->alloc_tm.rdma.ib_total_conn_ns+= ib_conn_tmp_ns;
+    tm->tot_setup_ns+= ib_conn_tmp_ns;
 
     //prints out all the timing results here
-    printf("[CONNECT] Time for ibv_reg_mr: %lu \n"         
+    printd("[CONNECT] Time for ibv_reg_mr: %lu \n"         
            "[CONNECT] Time for rdma_create_qp: %lu ns\n"
            "[CONNECT] Time for total server connection: %lu ns\n",
-            tm->alloc_tm.rdma.ib_mem_reg_ns, tm->alloc_tm.rdma.ib_create_qp_ns, tm->alloc_tm.rdma.ib_total_conn_ns);
+            tm->alloc_tm.rdma.reg_ns, tm->alloc_tm.rdma.create_qp_ns, tm->tot_setup_ns);
     #endif
 
     return 0;
@@ -275,7 +275,7 @@ ib_server_disconnect(struct ib_alloc *ib, ocm_timer_t tm)
    //Destroy the queue pair - returns void
     rdma_destroy_qp(ib->rdma.id);
   #ifdef TIMING
-  TIMER_END(ib_dis_fine_timer, tm->alloc_tm.rdma.ib_destroy_qp_ns);
+  TIMER_END(ib_dis_fine_timer, tm->alloc_tm.rdma.destroy_qp_ns);
   #endif
  
     //Reset the timer so it can be reused
@@ -291,7 +291,7 @@ ib_server_disconnect(struct ib_alloc *ib, ocm_timer_t tm)
     rc = 1;
   }
   #ifdef TIMING
-  TIMER_END(ib_dis_fine_timer, tm->alloc_tm.rdma.ib_mem_dereg_ns);
+  TIMER_END(ib_dis_fine_timer, tm->alloc_tm.rdma.dereg_ns);
   #endif
  //Reset the timer so it can be reused
   TIMER_CLEAR(ib_dis_fine_timer);
@@ -323,13 +323,13 @@ ib_server_disconnect(struct ib_alloc *ib, ocm_timer_t tm)
 
   rdma_destroy_event_channel(ib->rdma.ch);
 
-  TIMER_END(ib_disconnect_timer, tm->alloc_tm.rdma.ib_total_disconnect_ns); 
+  TIMER_END(ib_disconnect_timer, tm->tot_teardown_ns); 
  
   #ifdef TIMING
-  printf("[DISCONNECT] Time for ibv_dereg_mr: %lu ns\n"
+  printd("[DISCONNECT] Time for ibv_dereg_mr: %lu ns\n"
          "[DISCONNECT] Time for rdma_destroy_qp: %lu ns \n"
          "[DISCONNECT] Total time for ib_server_disconnect: %lu ns\n"
-          ,tm->alloc_tm.rdma.ib_mem_dereg_ns, tm->alloc_tm.rdma.ib_destroy_qp_ns, tm->alloc_tm.rdma.ib_total_disconnect_ns); 
+          ,tm->alloc_tm.rdma.dereg_ns, tm->alloc_tm.rdma.destroy_qp_ns, tm->tot_teardown_ns); 
   #endif
 
 
