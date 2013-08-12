@@ -32,6 +32,8 @@ void print_usage(const char* prog_name)
 
 static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B){
 
+  TIMER_DECLARE1(ocm_alloc_timer);
+
   int num_allocs = 3;
   ocm_alloc_t a[num_allocs];
   void *buf;
@@ -93,21 +95,13 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
   for(i = 0; i < num_allocs; i++)
   {
 
-#ifdef TIMING
-    TIMER_DECLARE1(ocm_alloc_timer);
     TIMER_START(ocm_alloc_timer);
-#endif     
     a[i] = ocm_alloc(alloc_params);
-#ifdef TIMING
     TIMER_END(ocm_alloc_timer, ocm_tmp_ns);
     TIMER_CLEAR(ocm_alloc_timer);
-
-    printf("Allocation time is %lu ns\n", tm->tot_setup_ns);
       
-    printf("OCM allocation time is %lu ns\n", ocm_tmp_ns);
+    printf("OCM allocation time is %lu ns\n\n", ocm_tmp_ns);
     ocm_alloc_ns += ocm_tmp_ns;
-    
-#endif     
 
     if (!a[i]) {
       printf("ocm_alloc failed on remote size %lu\n", rem_size_B);
@@ -131,13 +125,16 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
       }
     }
 
+    TIMER_START(ocm_alloc_timer);
     if(ocm_free(a[i], tm))
     {
       printf("ocm_free failed\n");
       goto fail;
     }
+    TIMER_END(ocm_alloc_timer, ocm_tmp_ns);
+    TIMER_CLEAR(ocm_alloc_timer);
     
-    printf("OCM teardown time is %lu ns\n", ocm_tmp_ns);
+    printf("OCM teardown time is %lu ns\n\n", ocm_tmp_ns);
     ocm_teardown_ns += ocm_tmp_ns;
     
     //Add the timing values to a running counter timer
@@ -427,6 +424,8 @@ static int read_write_bw_test(int num_iter, int alloc_type){
     alloc_params->kind = OCM_REMOTE_RDMA;
   else //alloc_type == 1
     alloc_params->kind = OCM_REMOTE_RMA;
+
+  alloc_params->tm = tm;
 
   a = ocm_alloc(alloc_params);
   if (!a) {
