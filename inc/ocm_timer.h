@@ -110,7 +110,17 @@ static void reset_ocm_timer(ocm_timer_t* tm)
 
 static void init_ocm_timer(ocm_timer_t* tm)
 {
-  *tm = (ocm_timer_t)calloc(1, sizeof(struct oncilla_timer));
+  //Allocate the *max* size that the timer could take up to avoid
+  //issues with data updates and pointer misdirection within the
+  //struct
+
+  int cudaSzB = 0;
+#ifdef CUDA
+  cudaSzB = 2*sizeof(cudaEvent_t);
+#endif
+  int timer_sz_B = (19*sizeof(uint64_t)) + cudaSzB;
+
+  *tm = (ocm_timer_t)calloc(1, timer_sz_B);
   //Initialize the timer to 0
   reset_ocm_timer(tm);
   //Initialize cudaEvent timers
@@ -162,7 +172,7 @@ static void print_ocm_alloc_timer(ocm_timer_t tm)
 #ifdef INFINIBAND
   printf("ibv_reg_mr: %6f ns\n"
       "rdma_create_qp: %6f ns\n",
-      (double)(tm->alloc_tm.rdma.reg_ns/tm->num_allocs), (double)(tm->alloc_tm.rdma.create_qp_ns/tm->num_allocs));
+      ((double)tm->alloc_tm.rdma.reg_ns)/((double)tm->num_allocs), ((double)tm->alloc_tm.rdma.create_qp_ns)/((double)tm->num_allocs));
 #elif EXTOLL
   printf("malloc: %6f ns\n"
       "rma_register: %6f ns\n"
