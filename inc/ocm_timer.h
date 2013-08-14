@@ -24,6 +24,35 @@
 
 struct oncilla_timer
 {
+  //Total amount of time for all transfers
+  uint64_t tot_transfer_ns; 
+  //time to transfer data to the host
+  uint64_t host_transfer_ns;
+  //time to transfer data from the host to the GPU
+  uint64_t gpu_transfer_ns;
+
+  uint64_t tot_transfer_B;
+  uint64_t host_transfer_B;
+  uint64_t gpu_transfer_B;
+
+  //number of allocations used for timing tracking
+  uint64_t num_allocs;
+  //number of data transfers (one-sided or two-sided) used for timing tracking
+  uint64_t num_transfers;
+  
+  //Total amount of time to create/teardown a connection
+  uint64_t tot_setup_ns; 
+  uint64_t tot_teardown_ns; 
+
+  //*************Be very careful about placing any
+  //general variables after the unions, as the struct's memory
+  //layout can vary depending on whether EXTOLL or IB is used.
+  //This caused some issues with random variables getting updated
+  //due to incorrect pointer references.*****************
+
+#ifdef CUDA
+  cudaEvent_t cuStart, cuStop;
+#endif
 
   union {
 #ifdef EXTOLL
@@ -53,10 +82,6 @@ struct oncilla_timer
 #endif
   } alloc_tm;
   
-  //Total amount of time to create/teardown a connection
-  uint64_t tot_setup_ns; 
-  uint64_t tot_teardown_ns; 
-
   union {
 #ifdef EXTOLL
     struct 
@@ -71,27 +96,7 @@ struct oncilla_timer
       uint64_t poll_ns; 
     } rdma;
 #endif
-  } data_tm;
-
-#ifdef CUDA
-  cudaEvent_t cuStart, cuStop;
-#endif
-  
-  //Total amount of time for all transfers
-  uint64_t tot_transfer_ns; 
-  //time to transfer data to the host
-  uint64_t host_transfer_ns;
-  //time to transfer data from the host to the GPU
-  uint64_t gpu_transfer_ns;
-
-  uint64_t tot_transfer_B;
-  uint64_t host_transfer_B;
-  uint64_t gpu_transfer_B;
-
-  //number of allocations used for timing tracking
-  uint64_t num_allocs;
-  //number of data transfers (one-sided or two-sided) used for timing tracking
-  uint64_t num_transfers;
+  } data_tm; 
 };
 
 typedef struct oncilla_timer * ocm_timer_t;

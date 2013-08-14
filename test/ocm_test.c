@@ -34,7 +34,7 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
 
   TIMER_DECLARE1(ocm_alloc_timer);
 
-  int num_allocs = 3;
+  int num_allocs = 5;
   ocm_alloc_t a[num_allocs];
   void *buf;
   size_t buf_len, remote_len;
@@ -406,7 +406,8 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   uint64_t max_rw_size_B = pow(2,30);
   int i;
   int counter=0;
-  ocm_timer_t tm;
+  ocm_timer_t alloc_tm, tm;
+  init_ocm_timer(&alloc_tm);
   init_ocm_timer(&tm);
 
   double conv_Gbps = 1000000000.0 / (double)(pow(2, 27));
@@ -425,7 +426,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   else //alloc_type == 1
     alloc_params->kind = OCM_REMOTE_RMA;
 
-  alloc_params->tm = tm;
+  alloc_params->tm = alloc_tm;
 
   a = ocm_alloc(alloc_params);
   if (!a) {
@@ -459,8 +460,8 @@ static int read_write_bw_test(int num_iter, int alloc_type){
       }
       //Each iteration adds the time to tm
     }
-    ocm_tot_bw_ns = tm->tot_transfer_ns / num_iter;
-    printf("Read for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
+    ocm_tot_bw_ns = ((double)(copy_params->tm->tot_transfer_ns)) / ((double)num_iter);
+    printf("Read for size %lu bytes took %6f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
 
     local_size_B*=2;
     //Reset the timer each time
@@ -491,16 +492,17 @@ static int read_write_bw_test(int num_iter, int alloc_type){
       }
       c++;
     }
-    ocm_tot_bw_ns = tm->tot_transfer_ns / num_iter;
+    ocm_tot_bw_ns = (double)tm->tot_transfer_ns / (double)num_iter;
     printf("Read for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
     
     local_size_B*=2;
     reset_ocm_timer(&tm);
   }
 
-  ocm_free(a, tm);
+  ocm_free(a, alloc_tm);
   //Free allocation and configuration parameters
-  free(tm);
+  //destroy_ocm_timer(tm);
+  destroy_ocm_timer(alloc_tm);
   free(alloc_params);
   free(copy_params);
 
@@ -515,7 +517,8 @@ static int read_write_bw_test(int num_iter, int alloc_type){
 fail:
 
   ocm_free(a, tm);
-  free(tm);
+  destroy_ocm_timer(tm);
+  destroy_ocm_timer(alloc_tm);
   free(alloc_params);
   free(copy_params);
   if (0 > ocm_tini())

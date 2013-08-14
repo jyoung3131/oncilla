@@ -798,6 +798,7 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
   }
   
   cp_param->tm->host_transfer_ns +=  (cp_param->tm->data_tm.rdma.post_ns + cp_param->tm->data_tm.rdma.poll_ns);
+  cp_param->tm->tot_transfer_ns +=  (cp_param->tm->data_tm.rdma.post_ns + cp_param->tm->data_tm.rdma.poll_ns);
 #endif
 #ifdef EXTOLL
   if(cp_param->bytes > src->u.rma.local_bytes)
@@ -820,8 +821,10 @@ ocm_copy_onesided(ocm_alloc_t src, ocm_param_t cp_param)
       return -1;
     }
   }
-  
+
   cp_param->tm->host_transfer_ns += cp_param->tm->data_tm.rma.put_get_ns;
+  cp_param->tm->tot_transfer_ns += cp_param->tm->data_tm.rma.put_get_ns;
+
 #endif
 
   return 0;

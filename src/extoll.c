@@ -103,7 +103,7 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
           len -= max_num_B_per_call;
 
         //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
-         rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
+         rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],(RMA2_Notification_Spec) (RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION),RMA2_CMD_DEFAULT);
         //rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
 
       }//end for
@@ -132,7 +132,8 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
           len -= max_num_B_per_call;
         
         //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
-        rc=rma2_post_get_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION,RMA2_CMD_DEFAULT);
+        rc=rma2_post_get_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],(RMA2_Notification_Spec) (RMA2_COMPLETER_NOTIFICATION),RMA2_CMD_DEFAULT);
+        //rc=rma2_post_get_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION,RMA2_CMD_DEFAULT);
 
         //Increment the dest and source offset for each put or get
         ex->rma_conn.dest_offset += max_num_B_per_call;
@@ -160,11 +161,8 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
         printd("-------------------------\n");
         //rma2_noti_dump just prints out the notification so it is not neccessarily needed
         //Diable by default; check inc/debug.h on how to enable
-#ifdef __DEBUG_ENABLED  
-#ifndef TIMING
-        rma2_noti_dump(ex->rma_conn.notification);
-#endif
-#endif
+        //rma2_noti_dump(ex->rma_conn.notification);
+        
         //But notifications must be freed to process new notifications
         rma2_noti_free(ex->rma_conn.port,ex->rma_conn.notification);
         printd("-------------------------\n");
@@ -173,6 +171,8 @@ int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, si
 
   //Track the time for peforming a put/get over all bytes and waiting for notification. 
   TIMER_END(ex_timer, tm->data_tm.rma.put_get_ns);
+
+  printd("Put/get time is %lu ns", tm->data_tm.rma.put_get_ns);
   
   free(src_addr);
   free(dest_addr);
