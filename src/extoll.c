@@ -40,277 +40,269 @@ static int run_once;
 //put_get_flag: put = 0; get = 1
 int extoll_rma2_transfer(extoll_t ex, size_t put_get_flag, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
-  RMA2_ERROR rc;
-  TIMER_DECLARE1(ex_timer);
+	RMA2_ERROR rc;
+	TIMER_DECLARE1(trans_timer);
+	TIMER_DECLARE1(noti_timer);
+	uint64_t trans_tm_ns = 0;
+	uint64_t noti_tm_ns = 0;
 
-  //The number of notifications specifies how many overlapping put/get operations we can 
-  //**NOTE** Testing showed that increasing the number of notifications doesn't have a great impact
-  //on bandwidth so 2 is the default number of overlapping calls
-  uint32_t num_notis = 2;
-  uint32_t i;
-  //**NOTE: This command can transfer up to 8 MB at once, so larger transfers must be broken down into smaller transfers
-  //For the last transfer we may need to transfer a small amount of data for the second put/get
-  uint64_t max_num_B_per_call = 8*(1<<20);
+	tm->data_tm.rma.put_get_ns = 0;
 
-  uint32_t last_transfer_flag = 0;
-  uint32_t last_num_transfers = 0;
+	//The number of notifications specifies how many overlapping put/get operations we can 
+	//**NOTE** Testing showed that increasing the number of notifications doesn't have a great impact
+	//on bandwidth so 2 is the default number of overlapping calls
+	uint32_t num_notis = 2;
+	uint32_t i;
+	//**NOTE: This command can transfer up to 8 MB at once, so larger transfers must be broken down into smaller transfers
+	//For the last transfer we may need to transfer a small amount of data for the second put/get
+	uint64_t max_num_B_per_call = 8*(1<<20);
 
-  uint64_t *src_addr = (uint64_t*)calloc(num_notis,sizeof(uint64_t));
-  uint64_t *dest_addr = (uint64_t*)calloc(num_notis,sizeof(uint64_t));
+	uint32_t last_transfer_flag = 0;
+	uint32_t last_num_transfers = 0;
 
-  //Initialize the destination and source offset and check to make sure that we aren't
-  //reading or writing past the local or remote buffer
-  ex->rma_conn.dest_offset = dest_offset;
-  ex->rma_conn.src_offset = src_offset;
+	uint64_t *src_addr = (uint64_t*)calloc(num_notis,sizeof(uint64_t));
+	uint64_t *dest_addr = (uint64_t*)calloc(num_notis,sizeof(uint64_t));
 
-  printd("RMA2 data transfer - need to transfer %lu B in 8 MB chunks\n", len);
-  printd("Up to %d overlapping put/get operations are allowed\n", num_notis);
+	//Initialize the destination and source offset and check to make sure that we aren't
+	//reading or writing past the local or remote buffer
+	ex->rma_conn.dest_offset = dest_offset;
+	ex->rma_conn.src_offset = src_offset;
 
-  TIMER_START(ex_timer);
-  while(len > 0)
-  {
-    //Each time through the loop update the base address to put/get to/from and then update
-    //the address for each additional put/get call
-    dest_addr[0] = ex->params.dest_nla+ex->rma_conn.dest_offset;
-    src_addr[0] = ex->rma_conn.src_offset;
+	printd("RMA2 data transfer - need to transfer %lu B in 8 MB chunks\n", len);
+	printd("Up to %d overlapping put/get operations are allowed\n", num_notis);
 
-    for(i = 1; i < num_notis; i++)
-    {
-      dest_addr[i] = dest_addr[i-1] + max_num_B_per_call;
-      src_addr[i]  = src_addr[i-1] + max_num_B_per_call;
-    }
+	while(len > 0)
+	{
+		//Each time through the loop update the base address to put/get to/from and then update
+		//the address for each additional put/get call
+		dest_addr[0] = ex->params.dest_nla+ex->rma_conn.dest_offset;
+		src_addr[0] = ex->rma_conn.src_offset;
 
-    //Issue N overlapping puts (0) or gets (1) to increase bandwidth
-    if(put_get_flag == 0)
-    {
-      for(i = 0; ((i < num_notis) && (!last_transfer_flag)); i++)
-      {
-        //Check first for the last transfer (one smaller than 8 MB)
-        if(len <= max_num_B_per_call)
-        {
-          if(len == 0)
-          {
-            last_transfer_flag = 1;
-            break;
-          }
-          last_transfer_flag = 1;
-          max_num_B_per_call = len;
-          len = 0;
-          last_num_transfers = i+1;
+		for(i = 1; i < num_notis; i++)
+		{
+			dest_addr[i] = dest_addr[i-1] + max_num_B_per_call;
+			src_addr[i]  = src_addr[i-1] + max_num_B_per_call;
+		}
 
-        }
-        else
-          len -= max_num_B_per_call;
+		for(i = 0; ((i < num_notis) && (!last_transfer_flag)); i++)
+		{
+			printd("Num B left %lu i %d num_notis %d\n",len, i, num_notis);
+			//Check first for the last transfer (one smaller than 8 MB)
+			if(len <= max_num_B_per_call)
+			{
+				if(len == 0)
+				{
+					last_transfer_flag = 1;
+					break;
+				}
+				last_transfer_flag = 1;
+				max_num_B_per_call = len;
+				len = 0;
+				last_num_transfers = i+1;
 
-        //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
-         rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],(RMA2_Notification_Spec) (RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION),RMA2_CMD_DEFAULT);
-        //rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION,RMA2_CMD_DEFAULT);
+			}
+			else
+				len -= max_num_B_per_call;
 
-      }//end for
-    }//end if put
-    else
-    {
-      for(i = 0; ((i < num_notis) && (!last_transfer_flag)); i++)
-      {
+			//Issue N overlapping puts (0) or gets (1) to increase bandwidth
+			if(put_get_flag == 0)
+			{
+				TIMER_START(trans_timer);
+				//For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
+			  rc=rma2_post_put_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],(RMA2_Notification_Spec) (RMA2_COMPLETER_NOTIFICATION | RMA2_REQUESTER_NOTIFICATION),RMA2_CMD_DEFAULT);
+				TIMER_END(trans_timer,trans_tm_ns);
 
-        printd("Num B left %lu i %d num_notis %d\n",len, i, num_notis);
-        //Check first for the last transfer (one smaller than 8 MB)
-        if(len <= max_num_B_per_call)
-        {
-          if(len == 0)
-          {
-            last_transfer_flag = 1;
-            break;
-          }
+			}
+			else //get
+			{
+				//For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
+				TIMER_START(trans_timer);
+				rc=rma2_post_get_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],(RMA2_Notification_Spec) (RMA2_COMPLETER_NOTIFICATION),RMA2_CMD_DEFAULT);
+				TIMER_END(trans_timer,trans_tm_ns);
 
-          last_transfer_flag = 1;
-          max_num_B_per_call = len;
-          len = 0;
-          last_num_transfers = i+1;
-        }
-        else
-          len -= max_num_B_per_call;
-        
-        //For put, RMA2_COMPLETER_NOTIFICATION indicates the the put command has completed (write has finished in remote memory)
-        rc=rma2_post_get_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],(RMA2_Notification_Spec) (RMA2_COMPLETER_NOTIFICATION),RMA2_CMD_DEFAULT);
-        //rc=rma2_post_get_bt(ex->rma_conn.port,ex->rma_conn.handle,ex->rma_conn.region, src_addr[i], max_num_B_per_call,dest_addr[i],RMA2_COMPLETER_NOTIFICATION,RMA2_CMD_DEFAULT);
+			}//end else
+			//Increment the dest and source offset for each put or get
+			ex->rma_conn.dest_offset += max_num_B_per_call;
+			ex->rma_conn.src_offset += max_num_B_per_call;
+			
+			TIMER_CLEAR(trans_timer);
+			tm->data_tm.rma.put_get_ns += trans_tm_ns;
+		}//end for
 
-        //Increment the dest and source offset for each put or get
-        ex->rma_conn.dest_offset += max_num_B_per_call;
-        ex->rma_conn.src_offset += max_num_B_per_call;
-      }//end for
-    }
+		//One the last sequence of transfers there may be fewer outstanding notifications
+		if(last_transfer_flag)
+			num_notis = last_num_transfers;
 
-    //One the last sequence of transfers there may be fewer outstanding notifications
-    if(last_transfer_flag)
-      num_notis = last_num_transfers;
+		//Wait for N notifications that the data was transferred
+		for(i=0;i<num_notis;i++)
+		{
+			printd("Notis i %d num_notis %d\n", i, num_notis);
+			//By timing the blocking time we get a full picture of when the put/get operation completed
+			TIMER_START(noti_timer);
+			rc=rma2_noti_get_block(ex->rma_conn.port, &(ex->rma_conn.notification));
 
-    //Wait for N notifications that the data was transferred
-      for(i=0;i<num_notis;i++)
-      {
-        printd("Notis i %d num_notis %d\n", i, num_notis);
-        //By timing the blocking time we get a full picture of when the put/get operation completed
-        rc=rma2_noti_get_block(ex->rma_conn.port, &(ex->rma_conn.notification));
+			if (rc!=RMA2_SUCCESS)
+			{
+				fprintf(stderr,"error in rma2_noti_get_block\n");
+				return 1;
+			}
+			//printd("\nGot Notification:\n");
+			//printd("-------------------------\n");
+			//rma2_noti_dump just prints out the notification so it is not neccessarily needed
+			//Diable by default; check inc/debug.h on how to enable
+			//rma2_noti_dump(ex->rma_conn.notification);
 
-        if (rc!=RMA2_SUCCESS)
-        {
-          fprintf(stderr,"error in rma2_noti_get_block\n");
-          return 1;
-        }
-        printd("\nGot Notification:\n");
-        printd("-------------------------\n");
-        //rma2_noti_dump just prints out the notification so it is not neccessarily needed
-        //Diable by default; check inc/debug.h on how to enable
-        //rma2_noti_dump(ex->rma_conn.notification);
-        
-        //But notifications must be freed to process new notifications
-        rma2_noti_free(ex->rma_conn.port,ex->rma_conn.notification);
-        printd("-------------------------\n");
-      }
-  }//end while
+			//But notifications must be freed to process new notifications
+			//printd("-------------------------\n");
+			rma2_noti_free(ex->rma_conn.port,ex->rma_conn.notification);
+			TIMER_END(noti_timer,noti_tm_ns);
+			TIMER_CLEAR(noti_timer);
 
-  //Track the time for peforming a put/get over all bytes and waiting for notification. 
-  TIMER_END(ex_timer, tm->data_tm.rma.put_get_ns);
+			tm->data_tm.rma.put_get_ns += noti_tm_ns;
+		}
+	}//end while
 
-  printd("Put/get time is %lu ns", tm->data_tm.rma.put_get_ns);
-  
-  free(src_addr);
-  free(dest_addr);
+	//Track the time for peforming a put/get over all bytes and waiting for notification. 
 
-  return 0;
+	printd("Put/get time is %lu ns\n", tm->data_tm.rma.put_get_ns);
+
+	free(src_addr);
+	free(dest_addr);
+
+	return 0;
 }
 
 
 /* Public functions */
 
-  int
+	int
 extoll_init(void)
 {
-  /* TODO in case we need to add init stuff later */
-  return 0;
+	/* TODO in case we need to add init stuff later */
+	return 0;
 }
 
-  extoll_t
+	extoll_t
 extoll_new(struct extoll_params *p)
 {
-  struct extoll_alloc *ex = NULL;
+	struct extoll_alloc *ex = NULL;
 
-  if (!p)
-    goto fail;
+	if (!p)
+		goto fail;
 
-  ex = calloc(1, sizeof(*ex));
-  if (!ex)
-    goto fail;
+	ex = calloc(1, sizeof(*ex));
+	if (!ex)
+		goto fail;
 
-  //Store the destination node ID, VPID, and NLA
-  memcpy(&ex->params, p, sizeof(*p));
+	//Store the destination node ID, VPID, and NLA
+	memcpy(&ex->params, p, sizeof(*p));
 
-  /* TODO Lock this list */
-  INIT_LIST_HEAD(&ex->link);
-  list_add(&ex->link, &extoll_allocs);
+	/* TODO Lock this list */
+	INIT_LIST_HEAD(&ex->link);
+	list_add(&ex->link, &extoll_allocs);
 
-  return (extoll_t)ex;
+	return (extoll_t)ex;
 
 fail:
-  return (extoll_t)NULL;
+	return (extoll_t)NULL;
 }
 
 //Free the EXTOLL allocation object
-  int
+	int
 extoll_free(extoll_t ex)
 {
-  int ret = 0;
+	int ret = 0;
 
-  //The buffer params.buf should be freed when
-  //pages are unregistered in extoll_client_disconnect
+	//The buffer params.buf should be freed when
+	//pages are unregistered in extoll_client_disconnect
 
-  //Delete the EXTOLL object from the list
-  list_del(&(ex->link));
+	//Delete the EXTOLL object from the list
+	list_del(&(ex->link));
 
-  //Free the EXTOLL object
-  free(ex);
-  return ret;
+	//Free the EXTOLL object
+	free(ex);
+	return ret;
 
 }
 
 void extoll_notification(extoll_t ex)
 {
-  //Store this location so we can jump back here if needed to
-  //break out of the notification call
-  setjmp(jmp_noti_buf);
-  //Once we jump back the notification call will not be run the second time
-  if(!run_once)
-  {
-    run_once = 1;
-    extoll_server_notification((struct extoll_alloc*)ex);
-  }
-  //extoll_server_disconnect((struct extoll_alloc*)ex);
-  //Pass a Ctrl-C so that the main daemon (in src/main.c) will also be terminated)
-  raise(SIGINT);
+	//Store this location so we can jump back here if needed to
+	//break out of the notification call
+	setjmp(jmp_noti_buf);
+	//Once we jump back the notification call will not be run the second time
+	if(!run_once)
+	{
+		run_once = 1;
+		extoll_server_notification((struct extoll_alloc*)ex);
+	}
+	//extoll_server_disconnect((struct extoll_alloc*)ex);
+	//Pass a Ctrl-C so that the main daemon (in src/main.c) will also be terminated)
+	raise(SIGINT);
 }
 
 //Close down the EXTOLL server and client applications
-  int
+	int
 extoll_disconnect(extoll_t ex, bool is_server, ocm_timer_t tm)
 {
-  int err;
+	int err;
 
-  if (!ex)
-    return -1;
+	if (!ex)
+		return -1;
 
-  if (is_server)
-    err = extoll_server_disconnect((struct extoll_alloc*)ex, tm);
-  else
-    err = extoll_client_disconnect((struct extoll_alloc*)ex, tm);
+	if (is_server)
+		err = extoll_server_disconnect((struct extoll_alloc*)ex, tm);
+	else
+		err = extoll_client_disconnect((struct extoll_alloc*)ex, tm);
 
-  return err;
+	return err;
 }
 
 
 
 /* TODO provide an accept and connect separately, instead of the bool */
-  int
+	int
 extoll_connect(extoll_t ex, bool is_server, ocm_timer_t tm)
 {
-  int err;
+	int err;
 
-  if (!ex)
-    return -1;
+	if (!ex)
+		return -1;
 
-  if (is_server)
-  {
-    err = extoll_server_connect((struct extoll_alloc*)ex, tm);
-  }
-  else
-    err = extoll_client_connect((struct extoll_alloc*)ex, tm);
+	if (is_server)
+	{
+		err = extoll_server_connect((struct extoll_alloc*)ex, tm);
+	}
+	else
+		err = extoll_client_connect((struct extoll_alloc*)ex, tm);
 
-  return err;
+	return err;
 }
 
 /* client function: pull data fom server */
-  int
+	int
 extoll_read(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
-  if (!ex)
-    return -1;
-  if ((dest_offset + len) > ex->params.buf_len) {
-    printd("error: would read past end of remote buffer\n");
-    return -1;
-  }
-  return extoll_rma2_transfer(ex, 1, src_offset, dest_offset, len, tm);
+	if (!ex)
+		return -1;
+	if ((dest_offset + len) > ex->params.buf_len) {
+		printd("error: would read past end of remote buffer\n");
+		return -1;
+	}
+	return extoll_rma2_transfer(ex, 1, src_offset, dest_offset, len, tm);
 
 }
 
 /* client function: push data to server */
-  int
+	int
 extoll_write(extoll_t ex, size_t src_offset, size_t dest_offset, size_t len, ocm_timer_t tm)
 {
-  if (!ex || len == 0)
-    return -1;
-  if ((dest_offset + len) > ex->params.buf_len) {
-    printd("error: would write past end of remote buffer\n");
-    return -1;
-  }
-  return extoll_rma2_transfer(ex, 0, src_offset, dest_offset, len, tm);
+	if (!ex || len == 0)
+		return -1;
+	if ((dest_offset + len) > ex->params.buf_len) {
+		printd("error: would write past end of remote buffer\n");
+		return -1;
+	}
+	return extoll_rma2_transfer(ex, 0, src_offset, dest_offset, len, tm);
 }
 

@@ -144,7 +144,7 @@ static int alloc_test(int suboption, uint64_t local_size_B, uint64_t rem_size_B)
  
   print_ocm_timer(tot_timer);
 
-  printf("Average Oncilla time for allocation: %6f ns, deallocation: %6f ns\n", (double)(ocm_alloc_ns/tot_timer->num_allocs), (double)(ocm_teardown_ns/tot_timer->num_allocs));
+  printf("Average Oncilla time for allocation: %6f ns, deallocation: %6f ns\n", ((double)(ocm_alloc_ns)/((double)tot_timer->num_allocs)), ((double)ocm_teardown_ns)/((double)tot_timer->num_allocs));
 
   destroy_ocm_timer(tm);
   free(alloc_params);
