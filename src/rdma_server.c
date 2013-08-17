@@ -229,7 +229,7 @@ ib_server_connect(struct ib_alloc *ib, ocm_timer_t tm)
     //prints out all the timing results here
     printd("[CONNECT] Time for ibv_reg_mr: %lu \n"         
            "[CONNECT] Time for rdma_create_qp: %lu ns\n"
-           "[CONNECT] Time for total server connection: %lu ns\n",
+           "[CONNECT] Time for total server connection (without malloc): %lu ns\n",
             tm->alloc_tm.rdma.reg_ns, tm->alloc_tm.rdma.create_qp_ns, tm->tot_setup_ns);
     #endif
 

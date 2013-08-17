@@ -55,7 +55,7 @@ struct oncilla_timer
 #endif
 
   union {
-#ifdef EXTOLL
+//#ifdef EXTOLL
     struct 
     {
       //allocation timers
@@ -68,18 +68,21 @@ struct oncilla_timer
       uint64_t close_ns;
       uint64_t dereg_ns;
     } rma;
-#endif
-#ifdef INFINIBAND
+//#endif
+//#ifdef INFINIBAND
     struct 
     {
       //allocation timers
       uint64_t create_qp_ns;
+      uint64_t malloc_ns;
       uint64_t reg_ns;    
       //deallocation timers
       uint64_t destroy_qp_ns;
-      uint64_t dereg_ns; 
+      uint64_t dereg_ns;
+      uint64_t tmp1;
+      uint64_t tmp2;
     } rdma;
-#endif
+//#endif
   } alloc_tm;
   
   union {
@@ -137,6 +140,7 @@ static void accum_ocm_timer(ocm_timer_t* dest, const ocm_timer_t src)
 #ifdef INFINIBAND
   (*dest)->alloc_tm.rdma.reg_ns += src->alloc_tm.rdma.reg_ns;
   (*dest)->alloc_tm.rdma.create_qp_ns += src->alloc_tm.rdma.create_qp_ns;
+  (*dest)->alloc_tm.rdma.malloc_ns += src->alloc_tm.rdma.malloc_ns;
   (*dest)->alloc_tm.rdma.dereg_ns += src->alloc_tm.rdma.dereg_ns;
   (*dest)->alloc_tm.rdma.destroy_qp_ns += src->alloc_tm.rdma.destroy_qp_ns;
 
@@ -170,8 +174,10 @@ static void print_ocm_alloc_timer(ocm_timer_t tm)
     return;
 
 #ifdef INFINIBAND
-  printf("ibv_reg_mr: %6f ns\n"
+  printf("malloc: %6f ns\n"
+      "ibv_reg_mr: %6f ns\n"
       "rdma_create_qp: %6f ns\n",
+      ((double)tm->alloc_tm.rdma.malloc_ns)/((double)tm->num_allocs),
       ((double)tm->alloc_tm.rdma.reg_ns)/((double)tm->num_allocs), ((double)tm->alloc_tm.rdma.create_qp_ns)/((double)tm->num_allocs));
 #elif EXTOLL
   printf("malloc: %6f ns\n"

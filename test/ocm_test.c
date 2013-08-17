@@ -447,7 +447,6 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   while(local_size_B <= (max_rw_size_B)){
     //Use a one-sided copy since we are copying from a local-remote IB
     //paired object
-    printf("Reading for size %lu\n", local_size_B);
     copy_params->bytes= local_size_B;
     ocm_tot_bw_ns = 0;  
 
@@ -479,7 +478,6 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   while(local_size_B <= (max_rw_size_B))
   {
     copy_params->bytes= local_size_B;
-    printf("Writing for size %lu\n", local_size_B);
     ocm_tot_bw_ns = 0;  
 
     for (i=0; i<num_iter; i++){
@@ -493,7 +491,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
       c++;
     }
     ocm_tot_bw_ns = (double)tm->tot_transfer_ns / (double)num_iter;
-    printf("Read for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
+    printf("Write for size %lu bytes took %4f ns and had BW of %4f Gb/s\n", local_size_B, ocm_tot_bw_ns, (((double)local_size_B)/(ocm_tot_bw_ns))*conv_Gbps);
     
     local_size_B*=2;
     reset_ocm_timer(&tm);
@@ -502,7 +500,7 @@ static int read_write_bw_test(int num_iter, int alloc_type){
   ocm_free(a, alloc_tm);
   //Free allocation and configuration parameters
   //destroy_ocm_timer(tm);
-  destroy_ocm_timer(alloc_tm);
+  //destroy_ocm_timer(alloc_tm);
   free(alloc_params);
   free(copy_params);
 

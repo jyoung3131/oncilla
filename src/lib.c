@@ -273,14 +273,13 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
     p.port      = msg.u.alloc.u.rdma.port;
     p.buf_len   = alloc_param->local_alloc_bytes;
 #ifdef TIMING
-    uint64_t mal_ns=0;
     TIMER_DECLARE1(mal_timer);
     TIMER_START(mal_timer);
 #endif
     p.buf       = malloc(p.buf_len);
 #ifdef TIMING
-    TIMER_END(mal_timer, mal_ns);
-    printf("IB Malloc time: %lu\n", mal_ns);
+    TIMER_END(mal_timer, alloc_param->tm->alloc_tm.rdma.malloc_ns);
+    printd("IB Malloc time: %lu\n", alloc_param->tm->alloc_tm.rdma.malloc_ns);
 #endif
     if (!p.buf)
       goto out;
@@ -311,6 +310,7 @@ ocm_alloc(ocm_alloc_param_t alloc_param)
       goto out;
 #ifdef TIMING
     TIMER_END(ib_con_timer, ib_con_ns);
+    alloc_param->tm->tot_setup_ns += alloc_param->tm->alloc_tm.rdma.malloc_ns;
     printf("ib connection time: %lu\n", ib_con_ns);
 #endif
 
