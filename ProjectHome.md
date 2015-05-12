@@ -1,0 +1,5 @@
+Oncilla is a project that aims to provide a commodity-based, non-coherent managed global address space (GAS) to support efficient data movement between host memory (DRAM) and accelerators (GPUs). Oncilla provides basic allocation and aggregation support for applications as well as support for multiple networking fabrics to perform high-performance data movement operations, including the University of Heidelberg's [EXTOLL](http://www.extoll.de) fabric and InfiniBand. Allocations and data movement are exposed to applications through the Oncilla API - a simplified interface built into a Linux shared library.
+
+Current requirements for Oncilla include the use of either IB (OFED stack tested) or EXTOLL networking stack (RMA2) and the use of CUDA for GPU allocations. Please note that this is a **work in progress**, so any code is likely in an intermediate state.
+
+For more information please see our project [page](http://gpuocelot.gatech.edu/projects/oncilla-gas-infrastructure/).
